@@ -2,143 +2,115 @@
 
 [English](README.md) | [简体中文](README_zh.md)
 
-CodeHarness is an experimental Coding Agent Harness built to measure two effects separately:
+CodeHarness is the macOS client side of a coding-agent research setup. It owns the single-agent runtime, model routing, tools, per-task workspace, trace, and experiment reporting. MiniOJ is a separately deployed service and is reached only through HTTP JSON with a Bearer token.
 
-1. gains from stronger language models;
-2. gains from an agent harness, judge feedback, test generation, and iterative control loop.
+Phases 0 and 1 are complete. The installable distribution is client-only: its wheel contains `agent` and `experiments`, and has no MiniOJ server commands, server dependencies, or imports of `oj` / `shared`. The old `oj/` and `shared/` source trees remain as preserved legacy content. Local tests and real MiniOJ submission evidence are recorded separately.
 
-The repository is developed in runnable phases. **Phase 1 is implemented now:** a FastAPI/SQLite Online Judge foundation with real users, browser sessions, an administrator interface, and problem CRUD. Judge execution, machine APIs, and the agent are explicitly tracked in [TODO.md](TODO.md), not represented by misleading stubs.
+## Current verified scope
 
-## Architecture
+- client-only packaging, dependencies, console entries, and environment settings;
+- CodeHarness-owned problem, submission, feedback, error, model-response, state, and trace-event types;
+- typed Bearer HTTP operations, strict success-status/JSON validation, classified transport/HTTP/protocol/result-unknown failures, and OJClient-owned polling;
+- explicit Custom Run compatibility mode: canonical `source_code` by default, optional legacy `code` alias;
+- schema-checked tools, atomic workspace files, protected managed files, explicit overwrite, traversal/symlink rejection, and correlated redacted Trace events;
+- a model-free fixed-solution workflow that persists problem, source, submission states, verdict, feedback, State, and Trace without executing code locally;
+- versioned protocol example fixtures that label agreed cores, draft details, unconfirmed error shape, and forward-compatibility-only values;
+- task-artifact ignore rules that ignore only the root `/workspace/`, not `agent/workspace/` source;
+- a client-only pytest entry independent of MiniOJ server fixtures;
+- 55 client tests using fixtures, fakes, and `httpx.MockTransport` only.
+- one real fixed-solution MiniOJ chain: `t1001` submission `sub_FhqFt4PN68kPAJ7N` reached `FINISHED / AC`, passed 5/5 tests, and made zero LLM calls.
+
+This completes Phase 1 but does not verify any model provider. Phase 2 will complete the model layer. Current loop code is retained for reuse but is not accepted as Phase 3/4 merely because the fixed-solution chain succeeds.
+
+## Architecture boundary
 
 ```text
-MacBook                                     WSL Ubuntu
-CodingAgent → Tools → typed OJ Client ─────► FastAPI OJ Server
-   │                                             │
-Model policy → router → provider              Worker       (Phase 2)
-                                                 │
-                                            Docker sandbox (Phase 2)
+macOS CodeHarness                                      remote MiniOJ
+┌─────────────────────────────────┐                  ┌───────────────────┐
+│ Agent / Context / State / Trace │                  │ HTTP JSON API     │
+│ Model policy / router / adapter │                  │ judge / testcase │
+│ Tools → CodeHarness OJClient    ├── Bearer HTTP ─►│ sandbox / worker  │
+└─────────────────────────────────┘                  └───────────────────┘
 ```
 
-The Mac runs the future agent, provider calls, workspaces, and experiments. WSL Ubuntu runs the OJ web/API process, worker, and Docker sandbox. The agent will use only HTTP OJ operations and will not know how WSL, Docker, compilers, or judge files work. See [docs/architecture.md](docs/architecture.md) for the adopted boundaries.
+CodeHarness does not import MiniOJ modules, share its database or testcase files, start a local judge, execute submitted C++ locally, or use SSH/remote shell as an API substitute. See [docs/architecture.md](docs/architecture.md) and [TODO.md](TODO.md).
 
-## Current capabilities (Phase 1)
+## macOS setup
 
-- Registration, login, POST-only logout, profile editing, and password changes.
-- Argon2id password hashes; signed HTTP-only browser sessions; CSRF protection on state-changing forms.
-- Public problem list/detail pages.
-- Admin problem create/edit/delete and user role/activation management.
-- Configurable SQLAlchemy database and commands to initialize it or create an admin.
-- Responsive server-rendered Jinja UI with no frontend framework.
-
-API tokens, submissions, custom runs, testcases, and judging are not implemented until Phases 2-3. Accordingly, no untrusted program is executed by this version.
-
-## Requirements
-
-- Python 3.9+
-- [`uv`](https://docs.astral.sh/uv/) (recommended), or a Python virtual environment with `pip`
-- WSL Ubuntu is the intended deployment host for the OJ. Docker is required starting in Phase 2, not for Phase 1.
-
-## Quick start
-
-From the repository root:
+Requirements: Python 3.9+ and [`uv`](https://docs.astral.sh/uv/).
 
 ```bash
 uv sync --extra dev
 cp .env.example .env
-```
-
-Replace `SECRET_KEY` in `.env`, then export the file for the current shell:
-
-```bash
-set -a
-source .env
-set +a
-uv run codeharness-admin init-db
-uv run codeharness-admin create-admin --username admin --email admin@example.com
-uv run codeharness-oj
-```
-
-Open <http://127.0.0.1:8000>. The server listens on `0.0.0.0:8000`, so the Mac can use the WSL host address if the network/firewall permits it.
-
-The server refuses to start without `SECRET_KEY`. Use a long random value and enable `SESSION_HTTPS_ONLY=true` behind HTTPS.
-
-## Database and admin operations
-
-The default database is `data/codeharness.db`. Override it with any SQLAlchemy URL in `DATABASE_URL`.
-
-Initialize the schema:
-
-```bash
-uv run codeharness-admin init-db
-```
-
-Create an admin (the password is prompted without echo and never accepted as a command-line argument):
-
-```bash
-uv run codeharness-admin create-admin \
-  --username admin \
-  --email admin@example.com
-```
-
-Public registration always creates a `user`; it cannot grant admin privileges.
-
-## Creating problems
-
-1. Log in as an admin.
-2. Open `/admin` → **Problems** → **New problem**.
-3. Enter a stable lowercase problem ID, statement, limits, optional source metadata, rating, and comma-separated tags.
-
-Problem IDs are immutable after creation. The OJ stores no Codeforces-specific assumptions and performs no automatic import.
-
-## Testcase upload and Judge Worker
-
-These begin in Phase 2 and deliberately have no command in Phase 1. The adopted design is:
-
-- testcase metadata in SQLite and bodies under `data/problems/<problem-id>/tests/`;
-- a separate polling worker claiming `QUEUED` submissions;
-- C++20 compilation and execution only inside a restricted Docker sandbox;
-- stable `QUEUED → COMPILING → RUNNING → FINISHED` states and canonical verdict enums.
-
-README commands for testcase ingestion and `worker` startup will be added with that runnable phase.
-
-## Agent and Bailian configuration
-
-The Mac-side agent begins in Phase 4. `.env.example` already names the boundary values (`OJ_BASE_URL`, `OJ_API_TOKEN`, `BAILIAN_API_KEY`, and `BAILIAN_BASE_URL`) without secrets. Concrete model names will live in a non-secret model-profile configuration, never in agent loop code.
-
-`code-only` and `harness-loop` are Phase 5 experiment commands. They are intentionally unavailable now:
-
-- `code-only`: one model response, one submission, no feedback or retry;
-- `harness-loop`: PLAN/CODE/TEST/DEBUG/REVIEW with judge feedback, retry, and model routing.
-
-## Tests
-
-```bash
+cp config/models.example.yaml config/models.yaml
+uv run codeharness-agent --help
+uv run codeharness-oj-client --help
+uv run codeharness-report --help
 uv run pytest
 ```
 
-The test suite uses a separate temporary SQLite database and covers authentication, settings, authorization, admin user management, and problem CRUD.
+The default test command collects only `client_tests/`. It makes no network request, calls no model, and submits nothing to MiniOJ.
+
+`.env.example` intentionally contains blank endpoint and secret fields:
+
+```dotenv
+OJ_BASE_URL=
+OJ_API_TOKEN=
+BAILIAN_API_KEY=
+BAILIAN_BASE_URL=
+MODEL_CONFIG=./config/models.yaml
+```
+
+Provide the OJ endpoint through `.env` for real runs; choose provider and model IDs before later model integration. Do not commit `.env`; it is ignored. `config/models.example.yaml` contains placeholders, not confirmed models or prices.
+
+## Model-free MiniOJ client
+
+Read one sanitized problem without submitting:
+
+```bash
+uv run codeharness-oj-client inspect-problem <problem-id> \
+  --http-timeout <seconds>
+```
+
+Run the Phase 1 fixed-solution chain. All transport and polling values are explicit because U03 has no approved defaults. `--confirm-submit` is required because the command creates a real remote formal submission.
+
+```bash
+uv run codeharness-oj-client submit-fixed <problem-id> <solution.cpp> \
+  --workspace-root workspace \
+  --http-timeout <seconds> \
+  --poll-interval <seconds> \
+  --deadline <seconds> \
+  --confirm-submit
+```
+
+The command does not compile or run the source locally. It uses MiniOJ HTTP only. It never automatically retries a request; a formal-submission timeout is recorded as `result_unknown` to prevent blind duplicate POSTs.
+
+## Later-phase candidate commands
+
+```bash
+uv run codeharness-agent code-only <problem-id> --profile standard
+uv run codeharness-agent harness-loop <problem-id> --max-attempts 4
+uv run codeharness-report workspace
+```
+
+These entry points are installed and their parser/runtime foundations load. The first two require real model configuration and implement later-phase candidate paths. Do not treat their current escalation, pricing, budgets, or loop behavior as a confirmed experiment design.
 
 ## Repository structure
 
 ```text
-CodeHarness/
-├── agent/                 # Phase 4-5 (empty until implementation)
-├── config/                # model/runtime profiles when introduced
-├── docs/
-│   └── architecture.md
-├── experiments/           # Phase 5 experiment definitions
-├── oj/
-│   └── server/            # Phase 1 FastAPI app, models, routes, templates
-├── shared/                # stable cross-process types when needed
-├── tests/
-├── .env.example
-├── README.md
-├── README_zh.md
-├── TODO.md
-└── pyproject.toml
+agent/                       # installable client runtime
+  config.py                  # client-only environment settings
+  core/                      # candidate single-agent loop/context/policy
+  models/                    # provider-independent types and routing
+  oj_client/                 # HTTP client and CodeHarness-owned wire types
+  tools/                     # tool runtime
+  workspace/                 # task state, files, and trace source
+experiments/                 # installable reporting code
+client_tests/                # independent Phase 0/1 client tests
+config/                      # non-secret placeholder model mapping
+docs/architecture.md         # boundaries and recorded decisions
+TODO.md                      # phases, evidence, and unresolved decisions
+oj/, shared/, tests/         # preserved legacy mixed-repository content
 ```
 
-## Development principles
-
-Keep the judge, agent, model provider, and web/API boundaries explicit. Add infrastructure only when the current phase needs it. Do not run user code in the web process; do not expose hidden-test or provider internals through convenience shortcuts.
+Protocol examples live in `client_tests/fixtures/protocol/`. They are client fixtures, not a shared Python schema package and not proof that a remote endpoint implements the draft.

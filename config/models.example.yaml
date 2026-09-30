@@ -1,0 +1,21 @@
+# Placeholders only. Phase 0 does not select provider endpoints, model IDs,
+# supported parameters, or prices.
+providers:
+  bailian:
+    type: openai-compatible
+    base_url_env: BAILIAN_BASE_URL
+    api_key_env: BAILIAN_API_KEY
+
+models:
+  fast:
+    provider: bailian
+    model: MODEL_NAME_FAST
+  standard:
+    provider: bailian
+    model: MODEL_NAME_STANDARD
+  strong:
+    provider: bailian
+    model: MODEL_NAME_STRONG
+  max:
+    provider: bailian
+    model: MODEL_NAME_MAX

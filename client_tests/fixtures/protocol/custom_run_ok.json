@@ -1,0 +1,10 @@
+{
+  "status": "OK",
+  "stdout": "3\n",
+  "stderr": "",
+  "exit_code": 0,
+  "time_ms": 15,
+  "memory_kb": 4096,
+  "stdout_truncated": false,
+  "stderr_truncated": false
+}

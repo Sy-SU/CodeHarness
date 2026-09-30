@@ -1,0 +1,18 @@
+{
+  "problem_id": "example-problem",
+  "title": "Example Problem",
+  "statement": "Add two integers.",
+  "input_specification": "Two integers.",
+  "output_specification": "Their sum.",
+  "notes": "",
+  "limits": {
+    "time_ms": 2000,
+    "memory_mb": 256
+  },
+  "samples": [
+    {
+      "input": "1 2\n",
+      "output": "3\n"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": "phase1-client-1",
+  "fixtures": {
+    "problem.json": "agreed_example",
+    "submission_queued.json": "agreed_core_partial_schema",
+    "submission_finished.json": "agreed_core_partial_schema",
+    "custom_run_ok.json": "agreed_success_core_failure_schema_unconfirmed",
+    "feedback_ce.json": "draft_detail_schema",
+    "error.json": "unconfirmed_schema",
+    "submission_unknown.json": "forward_compatibility_only"
+  }
+}

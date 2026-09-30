@@ -1,0 +1,8 @@
+{
+  "submission_id": "sub_future",
+  "status": "PAUSED_BY_REMOTE",
+  "verdict": "FUTURE_VERDICT",
+  "remote_extension": {
+    "opaque": true
+  }
+}

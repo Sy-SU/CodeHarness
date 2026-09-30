@@ -1,0 +1,5 @@
+{
+  "code": "example_error",
+  "message": "Example error response.",
+  "request_id": "req_example"
+}

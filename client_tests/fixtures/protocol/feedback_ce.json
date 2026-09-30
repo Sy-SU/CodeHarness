@@ -1,0 +1,8 @@
+{
+  "verdict": "CE",
+  "summary": "Compilation failed.",
+  "compile": {
+    "success": false,
+    "stderr": "example diagnostic"
+  }
+}

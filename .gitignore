@@ -9,7 +9,7 @@ htmlcov/
 data/*.db
 data/*.db-*
 data/problems/
-workspace/
+/workspace/
 dist/
 build/
 *.egg-info/
