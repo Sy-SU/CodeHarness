@@ -1,2 +1,0 @@
-"""CodeHarness test package."""
-

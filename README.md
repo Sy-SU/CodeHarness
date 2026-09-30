@@ -4,7 +4,7 @@
 
 CodeHarness is the macOS client side of a coding-agent research setup. It owns the single-agent runtime, model routing, tools, per-task workspace, trace, and experiment reporting. MiniOJ is a separately deployed service and is reached only through HTTP JSON with a Bearer token.
 
-Phases 0 and 1 are complete. The installable distribution is client-only: its wheel contains `agent` and `experiments`, and has no MiniOJ server commands, server dependencies, or imports of `oj` / `shared`. The old `oj/` and `shared/` source trees remain as preserved legacy content. Local tests and real MiniOJ submission evidence are recorded separately.
+Phases 0 and 1 are complete. The repository and installable distribution are client-only: the legacy embedded MiniOJ server, shared judge code, and server tests have been removed. The wheel contains only `agent` and `experiments`; local tests and real MiniOJ submission evidence are recorded separately.
 
 ## Current verified scope
 
@@ -110,7 +110,6 @@ client_tests/                # independent Phase 0/1 client tests
 config/                      # non-secret placeholder model mapping
 docs/architecture.md         # boundaries and recorded decisions
 TODO.md                      # phases, evidence, and unresolved decisions
-oj/, shared/, tests/         # preserved legacy mixed-repository content
 ```
 
 Protocol examples live in `client_tests/fixtures/protocol/`. They are client fixtures, not a shared Python schema package and not proof that a remote endpoint implements the draft.

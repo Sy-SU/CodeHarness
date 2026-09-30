@@ -33,9 +33,9 @@ CodeHarness 用于研究更强 LLM 的求解收益，以及 Judge Feedback、重
 | [agent/core/agent.py](../agent/core/agent.py)、[context.py](../agent/core/context.py) | 已有两种 mode、独立 ContextBuilder，提交轮询已委托 OJClient | 无 DEBUG → PLAN；非 AC 仍共用反馈 / DEBUG 路径，Phase 3/4 异常终态与 IE 分流尚未完成 |
 | [agent/cli.py](../agent/cli.py) | 现有解析器提供 `code-only` / `harness-loop` 子命令 | 规划中的 `codeharness-agent solve` 尚无对应子命令，后续需明确参数与兼容方式 |
 | [experiments/summarize.py](../experiments/summarize.py) | 按 mode / variant 扫描 State，汇总并输出 JSON | 尚非批量执行器，未见 CSV 导出；分组条件不足以保证模型、反馈和预算可比 |
-| [client_tests](../client_tests) | 默认入口独立于服务端 conftest；覆盖协议、错误、轮询、Workspace、Tool、Trace、固定解答 HTTP 链、CLI 防误提交与既有候选回归 | Phase 0/1 共 55 项本地测试通过；另有一次真实 AC 联调，二者均不算 Phase 3/4 验收 |
+| [client_tests](../client_tests) | 默认入口只收集客户端测试；覆盖协议、错误、轮询、Workspace、Tool、Trace、固定解答 HTTP 链、CLI 防误提交与既有候选回归 | Phase 0/1 共 55 项本地测试通过；另有一次真实 AC 联调，二者均不算 Phase 3/4 验收 |
 
-`oj/` 与 `shared/judge.py` 是当前混合工作区中的旧边界内容，不是本规划要继续开发的 CodeHarness 模块。它们及用户原有未提交改动继续保留，但已从 wheel、默认依赖、命令入口和 Phase 0 测试入口排除。客户端源码 AST 检查无 `oj` / `shared` import；这只证明代码边界，不证明 HTTP 联调。
+Phase 1 完成后，仓库中遗留的 `oj/`、`shared/` 与服务端 `tests/` 已按用户确认删除；原始基线仍可从 Git 历史 `ec73c05` 恢复。客户端源码无 MiniOJ 内部 import，wheel、sdist、默认依赖、命令入口和测试入口均只保留 CodeHarness 侧内容。真实 HTTP 联调证据仍与这个静态边界检查分开记录。
 
 现有代码还包含具体次数、超时、截断长度、Provider 参数及价格占位值。这些是待核验的实现选择，不能替用户解决下文未定项；本文不把它们确认为产品默认值。
 
@@ -45,7 +45,7 @@ CodeHarness 用于研究更强 LLM 的求解收益，以及 Judge Feedback、重
 2. **配置边界：** 客户端统一从 `ClientSettings` 读取 `OJ_BASE_URL`、`OJ_API_TOKEN`、`MODEL_CONFIG`；Provider endpoint / key 仍由模型 Registry 按显式配置引用。服务端数据库、Session、Docker、Worker 设置不进入客户端环境样例。
 3. **类型所有权：** HTTP 类型定义在 `agent/oj_client/types.py`，模型响应定义在 `agent/models/types.py`，State / Trace 事件定义在 `agent/workspace/task.py`；不使用 MiniOJ Python schema 包。
 4. **协议演进：** 只对已约定核心做最小类型校验；额外字段原样保留，未知 status / verdict / event 不提升为已知枚举。未确认的反馈细节和错误结构由 fixture manifest 明示为 draft / unconfirmed。
-5. **测试边界：** 默认 `pytest` 只收集 `client_tests/`，不加载旧服务端 `tests/conftest.py`。其中可复用已有 Fake / MockTransport 测试，但输出必须标为替身验证。
+5. **测试边界：** 默认 `pytest` 只收集 `client_tests/`；旧服务端 `tests/` 已移除。其中可复用已有 Fake / MockTransport 测试，但输出必须标为替身验证。
 6. **工件与源码：** `/workspace/` 是根目录运行工件；`agent/workspace/` 是可跟踪源码。真实 `.env` 保持忽略。
 
 以上决定覆盖 Phase 0。Phase 1 在下节继续确认客户端内部行为；具体远程字段、服务端重试/去重支持、模型 / 价格、预算、升级阈值和 Loop 转换仍由未定项管理。
@@ -117,7 +117,6 @@ config/
 experiments/       # 当前汇总；批量 Runner 尚未实现
 client_tests/      # 默认客户端测试与协议 fixture
 workspace/         # 每任务工件，不是代码模块
-oj/、shared/、tests/ # 保留的旧混合仓库内容，不进入客户端 wheel / 默认测试
 docs/architecture.md
 TODO.md
 .env.example

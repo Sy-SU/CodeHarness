@@ -4,7 +4,7 @@
 
 CodeHarness 是编程智能体研究环境的 macOS 客户端，负责单 Agent Runtime、模型路由、工具、逐任务 Workspace、Trace 与实验汇总。MiniOJ 是独立部署的服务，双方只通过 Bearer Token 认证的 HTTP JSON API 交互。
 
-Phase 0 与 Phase 1 已经完成。可安装发行包只包含客户端 `agent` 与 `experiments`，不包含 MiniOJ 服务端命令、服务端依赖，也不 import `oj` / `shared`。旧 `oj/`、`shared/` 源码继续作为历史内容保留。Phase 1 的本地测试与真实 MiniOJ 提交证据分别记录。
+Phase 0 与 Phase 1 已经完成。仓库和可安装发行包均已收敛为纯客户端：旧的内嵌 MiniOJ 服务端、共享 Judge 代码和服务端测试已经移除。wheel 只包含 `agent` 与 `experiments`；Phase 1 的本地测试与真实 MiniOJ 提交证据分别记录。
 
 ## 当前已验证范围
 
@@ -110,7 +110,6 @@ client_tests/                # 独立 Phase 0/1 客户端测试
 config/                      # 不含秘密的模型占位配置
 docs/architecture.md         # 边界与已确认决策
 TODO.md                      # 阶段、证据和未定项
-oj/, shared/, tests/         # 保留的旧混合仓库内容
 ```
 
 协议样例位于 `client_tests/fixtures/protocol/`。它们是客户端 fixture，不是共享 Python schema 包，也不证明远程接口已经实现该草案。

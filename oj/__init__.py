@@ -1,2 +1,0 @@
-"""CodeHarness Online Judge packages."""
-

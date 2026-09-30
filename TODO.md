@@ -22,9 +22,9 @@ CodeHarness 在 macOS 上负责单 Agent、模型路由、工具、Workspace、T
 | 两种模式 | `agent/core/agent.py`、`agent/core/context.py` | 已有 code-only 与循环路径；DEBUG → PLAN、异常终态、预算、版本追踪等仍有缺口 |
 | 实验 | `experiments/summarize.py` | 已有按 mode/variant 汇总 State 的 JSON 报告；尚非批量 Experiment Runner，未见 CSV 输出 |
 | 测试 | `client_tests/` | 默认 pytest 入口只收集客户端测试；Phase 0/1、固定链、CLI 防误提交与既有候选回归共 55 passed |
-| 旧边界 | `oj/`、`shared/judge.py` | 文件及其未提交改动保留，但不进入 wheel、默认依赖或 Phase 0 测试；本轮未开发服务端 |
+| 旧边界 | Git 历史中的 `oj/`、`shared/`、`tests/` | 旧内嵌 MiniOJ 服务端、共享 Judge 与服务端测试已在 Phase 1 后清理；需要时从 `ec73c05` 历史恢复，不进入当前客户端仓库 |
 
-源码细节、现有实现与目标差异见 [architecture.md](docs/architecture.md)。仓库原有多处未提交改动；Phase 0/1 只改动对应的客户端代码、配置、测试与说明，保留 `oj/` 等无关改动。
+源码细节、现有实现与目标差异见 [architecture.md](docs/architecture.md)。Phase 0/1 完成时未混入服务端改动；随后按用户确认清理了仓库中剩余的旧 `oj/`、`shared/` 与服务端 `tests/`，进一步收敛独立客户端边界。
 
 ## Phase 0：项目基础与协议整理
 
@@ -41,7 +41,7 @@ CodeHarness 在 macOS 上负责单 Agent、模型路由、工具、Workspace、T
 - [x] [实现/验证] 将任务工件规则收窄为根目录 `/workspace/`，确认 `agent/workspace/` 源码未被忽略；真实 `.env` 仍被忽略。
 - [x] [实现/验证] 在客户端内部定义题目、提交、反馈、错误、模型响应、State 和事件类型；客户端源码静态检查无 `oj` / `shared` import。
 - [x] [实现/验证] 将协议样例转为 `client_tests/fixtures/protocol/`；manifest 显式标记草案等级，解析器保留未知字段并把未知状态 / verdict 与已知枚举区分。
-- [x] [实现/验证] 默认 pytest 入口改为 `client_tests/`，不加载服务端 `tests/conftest.py`；包、配置、fixture 及已有 Fake/MockTransport 候选测试独立通过。
+- [x] [实现/验证] 默认 pytest 入口只收集 `client_tests/`；旧服务端 `tests/` 已在边界清理中移除，包、配置、fixture 及已有 Fake/MockTransport 候选测试独立通过。
 - [x] [实现/验证] 同步 README / README_zh 与 Agent、配置、实验说明，记录独立分工、macOS 起步、现有命令和未验证边界。
 
 **交付物：** 独立包与配置入口、非秘密环境样例、核心类型、协议 fixture、基础测试入口、更新后的起步文档。
@@ -55,7 +55,7 @@ CodeHarness 在 macOS 上负责单 Agent、模型路由、工具、Workspace、T
 | `env UV_CACHE_DIR=.uv-cache uv sync --extra dev --offline` | 成功；按新 lock 移除 FastAPI、SQLAlchemy、Uvicorn 等 24 个旧服务端/间接包，只安装客户端及 dev 依赖 |
 | `env UV_CACHE_DIR=.uv-cache uv run --no-sync pytest` | `20 passed`；只收集 `client_tests/`，包含协议、配置、导入边界和既有 Fake/MockTransport 回归 |
 | `env UV_CACHE_DIR=.uv-cache uv build --offline` | 成功生成 sdist 与 wheel |
-| `tar -tzf dist/codeharness-0.1.0.tar.gz`、`unzip -l dist/codeharness-0.1.0-py3-none-any.whl` 与 entry point 检查 | sdist / wheel 均排除 `oj` / `shared` / 服务端测试；wheel 只有 `agent`、`experiments` 和 metadata，当前入口为 Agent / OJ Client / Report |
+| `tar -tzf dist/codeharness-0.1.0.tar.gz`、`unzip -l dist/codeharness-0.1.0-py3-none-any.whl` 与 entry point 检查 | sdist / wheel 均为纯客户端；wheel 只有 `agent`、`experiments` 和 metadata，当前入口为 Agent / OJ Client / Report |
 | 解包 sdist 后从其根目录运行 `python -m pytest` | `20 passed`，确认发布源码自带的客户端包、fixture 与测试入口可独立加载 |
 | Python 3.9.6 `compileall` | `agent` / `experiments` 全部通过语法编译 |
 | `env UV_CACHE_DIR=.uv-cache uv run --no-sync codeharness-agent --help` 与 `codeharness-report --help` | 两个已安装客户端入口均可加载并显示帮助 |
@@ -95,7 +95,8 @@ Phase 0 未完成事项：无。真实 MiniOJ / 模型联调、完整 HTTP schem
 | `client_tests/test_phase1_cli.py` | 未给 `--confirm-submit` 或给出 NaN deadline 时在任何网络请求前停止 |
 | `codeharness-oj-client --help` | 独立 HTTP CLI 可加载；真实提交子命令要求显式 timeout / interval / deadline 与 `--confirm-submit` |
 | `env UV_CACHE_DIR=.uv-cache uv build --offline`，随后从 sdist 解包运行 `python -m pytest` | sdist / wheel 构建成功；解包后的独立客户端测试仍为 `55 passed` |
-| sdist / wheel 内容、entry point 与 `uv.lock` 检查 | 产物无 `oj` / `shared` / 服务端测试或服务端依赖；只含三个客户端命令入口 |
+| sdist / wheel 内容、entry point 与 `uv.lock` 检查 | 产物无服务端源码、测试或依赖；只含三个客户端命令入口 |
+| `test ! -e oj && test ! -e shared && test ! -e tests` 及发行包内容断言 | 旧内嵌服务端、共享 Judge、服务端测试和缓存目录均已移除；客户端测试与构建不受影响 |
 | `codeharness-oj-client inspect-problem t1001 --http-timeout 15` | 通过 Bearer HTTP 读取清洗题面 `Two Sum`；返回题面、限制与公开样例，未创建提交 |
 | `codeharness-oj-client submit-fixed t1001 /private/tmp/codeharness-phase1-t1001.cpp --workspace-root workspace --task-id phase1-live-t1001-20261001 --http-timeout 15 --poll-interval 1 --deadline 120 --confirm-submit` | 真实正式提交 `sub_FhqFt4PN68kPAJ7N`：`QUEUED → FINISHED / AC`，5/5 tests，feedback 与资源字段成功解析；`llm_call_count=0`、`submission_count=1` |
 | `rg -n -i "authorization|bearer|api[_-]?token|secret|password" workspace/phase1-live-t1001-20261001` | 无匹配；任务、源码、提交创建/终态、feedback、result、State 与 `phase1-v1` 事件均已落盘且未包含凭据 |
