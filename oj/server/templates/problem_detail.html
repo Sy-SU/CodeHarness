@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ problem.title }} · CodeHarness OJ{% endblock %}
+{% block content %}
+<article class="problem-detail">
+  <header class="problem-header">
+    <div>
+      <p class="eyebrow">{{ problem.id }}</p>
+      <h1>{{ problem.title }}</h1>
+      {% if problem.source %}
+        <p class="muted">
+          Source: {% if problem.source_url %}<a href="{{ problem.source_url }}" rel="noopener noreferrer">{% endif %}{{ problem.source }}{% if problem.source_id %} · {{ problem.source_id }}{% endif %}{% if problem.source_url %}</a>{% endif %}
+        </p>
+      {% endif %}
+    </div>
+    <dl class="limits">
+      <div><dt>Time limit</dt><dd>{{ problem.time_limit_ms }} ms</dd></div>
+      <div><dt>Memory limit</dt><dd>{{ problem.memory_limit_mb }} MB</dd></div>
+    </dl>
+  </header>
+
+  {% if problem.tags %}<div class="tags">{% for tag in problem.tags %}<span class="tag">{{ tag }}</span>{% endfor %}</div>{% endif %}
+
+  <section><h2>Statement</h2><div class="prose">{{ problem.statement }}</div></section>
+  {% if problem.input_specification %}<section><h2>Input</h2><div class="prose">{{ problem.input_specification }}</div></section>{% endif %}
+  {% if problem.output_specification %}<section><h2>Output</h2><div class="prose">{{ problem.output_specification }}</div></section>{% endif %}
+  {% if problem.notes %}<section><h2>Notes</h2><div class="prose">{{ problem.notes }}</div></section>{% endif %}
+</article>
+{% endblock %}
+

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Settings · CodeHarness OJ{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <p class="eyebrow">ACCOUNT</p>
+  <h1>Settings</h1>
+</div>
+<div class="settings-grid">
+  <section class="form-card">
+    <h2>Profile</h2>
+    {% if profile_error %}<div class="alert alert-error">{{ profile_error }}</div>{% endif %}
+    <form method="post" action="/settings/profile">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Username<input name="username" value="{{ current_user.username }}" required minlength="3" maxlength="40"></label>
+      <label>Email<input name="email" type="email" value="{{ current_user.email }}" required maxlength="320"></label>
+      <button class="button" type="submit">Save profile</button>
+    </form>
+  </section>
+  <section class="form-card">
+    <h2>Password</h2>
+    {% if password_error %}<div class="alert alert-error">{{ password_error }}</div>{% endif %}
+    <form method="post" action="/settings/password">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Current password<input name="current_password" type="password" autocomplete="current-password" required></label>
+      <label>New password<input name="new_password" type="password" autocomplete="new-password" required minlength="10"></label>
+      <label>Confirm new password<input name="new_password_confirm" type="password" autocomplete="new-password" required minlength="10"></label>
+      <button class="button" type="submit">Change password</button>
+    </form>
+  </section>
+</div>
+{% endblock %}
+

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Problems · CodeHarness OJ{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <p class="eyebrow">PROBLEM SET</p>
+  <h1>Problems</h1>
+  <p>Stable problem statements for human and agent experiments.</p>
+</div>
+{% if problems %}
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>ID</th><th>Title</th><th>Source</th><th>Rating</th><th>Tags</th></tr></thead>
+    <tbody>
+      {% for problem in problems %}
+      <tr>
+        <td class="mono">{{ problem.id }}</td>
+        <td><a href="/problems/{{ problem.id }}"><strong>{{ problem.title }}</strong></a></td>
+        <td>{{ problem.source or '—' }}</td>
+        <td>{{ problem.rating or '—' }}</td>
+        <td>
+          {% for tag in problem.tags %}<span class="tag">{{ tag }}</span>{% else %}—{% endfor %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="empty-state">No problems have been published yet.</div>
+{% endif %}
+{% endblock %}
+

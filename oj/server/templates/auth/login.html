@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Log in · CodeHarness OJ{% endblock %}
+{% block content %}
+<div class="auth-shell">
+  <div class="form-card">
+    <p class="eyebrow">WELCOME BACK</p>
+    <h1>Log in</h1>
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    <form method="post" action="/login">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="next_url" value="{{ next_url or '/' }}">
+      <label>Username or email<input name="identity" value="{{ identity or '' }}" autocomplete="username" required></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="button full" type="submit">Log in</button>
+    </form>
+    <p class="form-footer">Need an account? <a href="/register">Register</a>.</p>
+  </div>
+</div>
+{% endblock %}
+

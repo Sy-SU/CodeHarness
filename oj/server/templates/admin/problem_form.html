@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if editing else 'New' }} problem · CodeHarness OJ{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <p class="eyebrow">ADMIN · PROBLEMS</p>
+  <h1>{{ 'Edit problem' if editing else 'New problem' }}</h1>
+</div>
+{% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+<form class="form-card wide-form" method="post" action="{{ '/admin/problems/' ~ problem.id ~ '/edit' if editing else '/admin/problems/new' }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <div class="form-grid two">
+    <label>Problem ID
+      <input name="problem_id" value="{{ problem.id if problem else '' }}" pattern="[a-z0-9][a-z0-9-]*" maxlength="80" required {% if editing %}disabled{% endif %} placeholder="two-sum">
+      <small>Stable lowercase identifier; cannot be changed later.</small>
+    </label>
+    <label>Title<input name="title" value="{{ problem.title if problem else '' }}" maxlength="200" required></label>
+  </div>
+  <label>Statement<textarea name="statement" rows="10" required>{{ problem.statement if problem else '' }}</textarea></label>
+  <div class="form-grid two">
+    <label>Input specification<textarea name="input_specification" rows="6">{{ problem.input_specification if problem else '' }}</textarea></label>
+    <label>Output specification<textarea name="output_specification" rows="6">{{ problem.output_specification if problem else '' }}</textarea></label>
+  </div>
+  <label>Notes<textarea name="notes" rows="4">{{ problem.notes if problem else '' }}</textarea></label>
+  <div class="form-grid four">
+    <label>Time limit (ms)<input name="time_limit_ms" type="number" min="1" value="{{ problem.time_limit_ms if problem else 2000 }}" required></label>
+    <label>Memory limit (MB)<input name="memory_limit_mb" type="number" min="1" value="{{ problem.memory_limit_mb if problem else 256 }}" required></label>
+    <label>Rating<input name="rating" type="number" min="0" value="{{ problem.rating if problem and problem.rating is not none else '' }}"></label>
+    <label>Tags<input name="tags" value="{{ problem.tags_text if problem and problem.tags_text is defined else '' }}" placeholder="graphs, shortest-path"></label>
+  </div>
+  <div class="form-grid three">
+    <label>Source<input name="source" value="{{ problem.source or '' if problem else '' }}" placeholder="codeforces"></label>
+    <label>Source ID<input name="source_id" value="{{ problem.source_id or '' if problem else '' }}" placeholder="1900A"></label>
+    <label>Source URL<input name="source_url" type="url" value="{{ problem.source_url or '' if problem else '' }}"></label>
+  </div>
+  <div class="actions"><button class="button" type="submit">{{ 'Save changes' if editing else 'Create problem' }}</button><a class="button secondary" href="/admin/problems">Cancel</a></div>
+</form>
+{% endblock %}
+
