@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 from agent.core.checker import SAMPLE_POLICY
+from agent.core.formal_dedup import FORMAL_DEDUP_POLICY
 from agent.core.context import ContextBuilder
 from agent.core.generated_checker import INSTRUCTIONS, checker_messages
 from agent.execution import fingerprint
@@ -113,6 +114,7 @@ def frozen_fingerprint(config, models, condition_routes, oj_endpoint, *, config_
         "harness_config_hash": fingerprint(config.as_dict()["harness"]),
         "prompt_bundle_hash": prompts["prompt_bundle_hash"],
         "runtime_source_hash": runtime_source_hash(),
+        "formal_submission_dedup_policy": dict(FORMAL_DEDUP_POLICY),
         "checker_policy_version": SAMPLE_POLICY,
         "checker_policy_hash": fingerprint(config.sample_checking),
         "feedback_policy_version": VERDICT_ONLY_POLICY if config.expected_feedback_mode == "verdict_only" else "full_native_v1",

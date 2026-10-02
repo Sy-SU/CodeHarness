@@ -7,7 +7,7 @@ from agent.core.metrics import workspace_metrics,recovery_metrics,trace_events
 from agent.core.harness import HarnessPolicy
 from agent.oj_client.client import OJHTTPError,OJResultUnknownError
 from agent.oj_client.types import ClientErrorKind
-from client_tests.test_phase4_harness import GOOD,BAD,Router,OJ,make_agent
+from client_tests.test_phase4_harness import GOOD,BAD,Router,OJ,make_agent,good_variant
 
 
 def test_first_formal_ac_is_distinct_from_first_candidate_sample_pass(tmp_path):
@@ -31,7 +31,7 @@ def test_verified_sample_failure_debug_then_ac(tmp_path):
 
 @pytest.mark.parametrize('verdict',['WA','CE','RE','TLE','MLE','OLE'])
 def test_formal_program_failure_debug_ac_requires_linked_evidence(tmp_path,verdict):
-    agent,w,oj=make_agent(tmp_path,Router(['plan',GOOD,GOOD]),OJ([verdict,'AC']))
+    agent,w,oj=make_agent(tmp_path,Router(['plan',GOOD,good_variant(1)]),OJ([verdict,'AC']))
     assert agent.run_harness_loop().solved
     m=w.state.recovery_metrics
     assert not m['first_try_ac'] and m['recovered_to_ac'] and m['formal_recovery_to_ac']
@@ -70,7 +70,8 @@ def test_no_submission_never_is_first_try_ac_and_invalid_output_is_counted(tmp_p
 
 
 def test_replan_count_and_more_than_one_failed_candidate(tmp_path):
-    agent,w,_=make_agent(tmp_path,Router(['plan',GOOD,GOOD,GOOD,GOOD,'new plan',GOOD]),OJ(['WA']*4+['AC']))
+    agent,w,_=make_agent(tmp_path,Router(['plan',*[good_variant(i) for i in range(4)],
+        'new plan',good_variant(4)]),OJ(['WA']*4+['AC']))
     assert agent.run_harness_loop().solved
     m=w.state.recovery_metrics
     assert m['replan_count']==1 and m['debug_count']==3 and m['recovered_to_ac']
@@ -79,7 +80,7 @@ def test_replan_count_and_more_than_one_failed_candidate(tmp_path):
 
 
 def test_corrupted_association_and_incomplete_trace_cannot_create_recovery_credit(tmp_path):
-    agent,w,_=make_agent(tmp_path,Router(['plan',GOOD,GOOD]),OJ(['WA','AC']))
+    agent,w,_=make_agent(tmp_path,Router(['plan',GOOD,good_variant(1)]),OJ(['WA','AC']))
     agent.run_harness_loop()
     events,invalid=trace_events(w.read_text('events.jsonl'))
     state=w.read_json('state.json')
@@ -93,7 +94,7 @@ def test_corrupted_association_and_incomplete_trace_cannot_create_recovery_credi
 
 @pytest.mark.parametrize('corrupt',['debug_correlation','debug_response','candidate_call','review_hash','missing_submission'])
 def test_recovery_cannot_earn_credit_from_broken_causal_links(tmp_path,corrupt):
-    agent,w,_=make_agent(tmp_path,Router(['plan',GOOD,GOOD]),OJ(['WA','AC']))
+    agent,w,_=make_agent(tmp_path,Router(['plan',GOOD,good_variant(1)]),OJ(['WA','AC']))
     agent.run_harness_loop()
     events,_=trace_events(w.read_text('events.jsonl'));state=w.read_json('state.json')
     for event in events:

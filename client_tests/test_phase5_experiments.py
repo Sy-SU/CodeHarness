@@ -20,7 +20,7 @@ from experiments.cli import main
 from experiments.config import ExperimentConfig, Strategy
 from experiments.results import csv_text, summarize_rows, task_row
 from experiments.runner import ExperimentRunner
-from client_tests.test_phase4_harness import GOOD, OJ
+from client_tests.test_phase4_harness import GOOD, OJ, good_variant
 
 
 class Provider:
@@ -38,6 +38,8 @@ class Provider:
             self.interrupt = False
             raise KeyboardInterrupt()
         content = "plan" if "Phase: PLAN" in messages[-1].content else GOOD
+        if "Phase: DEBUG" in messages[-1].content:
+            content = good_variant(len(self.calls))
         return LLMResponse(content, self.usage, "fake", model, profile)
 
 

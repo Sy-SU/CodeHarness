@@ -1,6 +1,6 @@
-# CodeHarness 当前状态（2026-10-02）
+# CodeHarness 当前状态（2026-10-03）
 
-CodeHarness 是独立单 Agent 客户端；MiniOJ 是独立远程评测服务。当前已实现单题、串行实验、公开比赛题单、Dashboard 发起/观察、预算、安全恢复及独立 Experiment Preflight。原 Pilot 已完成并保留为只读诊断证据；主实验未执行。当前源码行为优先于历史文档。
+CodeHarness 是独立单 Agent 客户端；MiniOJ 是独立远程评测服务。当前已实现单题、串行实验、公开比赛题单、Dashboard 发起/观察、预算、安全恢复及独立 Experiment Preflight。本轮修复同 task 重复正式提交，使用本地替身验证；原 Pilot/Infrastructure Qualification 保留，Pilot-v2 和主实验未执行。当前源码行为优先于历史文档。
 
 ## 当前能力与冻结行为
 
@@ -11,6 +11,7 @@ CodeHarness 是独立单 Agent 客户端；MiniOJ 是独立远程评测服务。
 - 每任务默认 1 CNY、80 次模型、最多 10 次正式 POST，可调至现有边界；保守预留不退、未知 paid call/POST 不重发。code-only 保持一次调用上限。
 - 默认期望 verdict_only，必须有服务端声明；full 经 `formal_verdict_only_v1` 仅留下正式 ID/status/verdict。actual/effective/policy 分开记录，native/projected/unknown 不混组。
 - checkpoint 冻结配置、候选版本/SHA-256/模型调用/提交关联；旧任务沿用旧策略，不能 resume 偷换 checker 或预算。
+- 新 Harness 任务冻结 `task_source_bytes_v1`：task/problem/冻结题目身份/language/实际提交 UTF-8 源码 SHA 全一致时复用原正式结果及 ID，再过冻结反馈投影。LLM、候选和 DEBUG 正常计数，duplicate 单独计数，正式 POST/轮询/反馈 GET 不重复。checkpoint 持久化 action intent/结果与复用记录，锁内 resume；未知 POST 保持停止。Custom Run 独立，不跨 task 去重，不改重 PLAN 或预算策略。
 
 ## 当前实验与报告
 
@@ -18,7 +19,7 @@ CodeHarness 是独立单 Agent 客户端；MiniOJ 是独立远程评测服务。
 - `config/experiment.small.yaml`：公开 rating 核实的 12 题，1200/1400/1600/1800 各 3 题、每组一次，共 60 个独立任务；仅准备、未运行。整批 60 CNY 是额度分配上限，不是预计费用或执行授权。
 - `codeharness-experiment preflight` 独立检查 checker、实际模型路由、反馈、预算、prompt 内容及 Git/配置指纹，保存六份审计文件；0 LLM/Custom Run/正式提交。当前主实验检查为 `READY_WITH_WARNINGS`：token 4、special 5、unknown 3；后 8 题预计使用未认证 LLM checker，不计为 verified checker。
 - 主实验与 3 题 × 五组的 Pilot 均要求冻结 preflight 后才可启动。seed=20261002，按题分块、SHA-256 排序并轮换 condition 位置；启动/resume/后续 task 前拒绝内容与 dirty diff 漂移。原 Pilot 取 token 的 1400/1600/1800 题：15 planned、9 completed、6 failed_infrastructure；19 LLM、8 Custom Run、7 正式提交（AC 5 / WA 1 / CE 1）。原 SHA `65cc58c1e2e2acc6337c36b8dffdac10414b27bd` / fingerprint `2769cca5b6582b16401216ac69d82d97849c9514a744ef3aa10a7056c1f3d8a7` 只对应历史运行，结果见 `workspace/.experiments/pilot-live-20261002/pilot-validation.json`。
-- 后续独立 Infrastructure Qualification 限最多 4 个 CF2127D/token 任务：统一 transport timeout 600 秒（各网络阶段 inactivity，非总 deadline），standard/strong 本地输入预留 65536，自动 retry 0。原 Prompt、模型 ID、生成参数、checker、反馈和 Harness 策略保持冻结。改动与诊断见 [证据入口](docs/evidence/20261002-infrastructure-qualification.md)，最终运行 Gate 以独立 `qualification.json` 为准。Pilot-v2 仅准备相同 3 题 × 五组，执行需另行授权；主实验不得自动启动。
+- 独立 Infrastructure Qualification 的 4 个 CF2127D/token 任务已完成：20 LLM、14 Custom Run、4 正式提交；600 秒 transport timeout、65536 本地输入预留、自动 retry 0 生效。原 Gate `INFRA_NOT_READY` 的唯一 blocker 为 mixed-harness v3/v4 相同源码再次提交（395/396），原记录不改。诊断见 [原证据](docs/evidence/20261002-infrastructure-qualification.md)。本轮 dedup 针对性 304 / 全量 629 项测试与跨进程隔离 smoke 通过；新 SHA、Pilot-v2 frozen preflight/fingerprint 及最终运行 Gate 以独立 [readiness.json](workspace/.formal-dedup/dedup-20261002/readiness.json) 为准，见 [修复证据](docs/evidence/20261003-formal-dedup.md)。Pilot-v2 仅准备原 3 题 × 五组，执行需另行授权；主实验不得自动启动。
 - Recovery 从有序 Trace 派生：first_try_ac、sample/formal recovery、DEBUG/重 PLAN/无法验证等计数；失败→后续候选→正式 AC 的关联必须可核查。正式 recovery 另要求 DEBUG 与只读 REVIEW。基础设施错误、LLM checker 拒绝均不计算法修复。
 - 官方 Performance 直接读取 `GET /api/v1/contests/{id}/standings#rows[].performance`；`me.id` 与冻结的 `rows[].user_id` 唯一匹配。无计算公式、无 per-task 值。该值属于账户整场比赛，可能包含其他运行。
 - 显式刷新榜单只发 GET，保存独立 `performance.json`、读时合并；不重写 report/State/Trace、不触发 Agent。普通 Dashboard GET/轮询只读本地；`--read-only` 无刷新控制端点。

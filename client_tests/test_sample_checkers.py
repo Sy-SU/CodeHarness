@@ -14,7 +14,7 @@ from agent.oj_client.client import OJClient
 from agent.oj_client.types import CustomRunResult, ProblemSample
 from agent.tools.runtime import build_default_tools
 from agent.workspace.task import TaskWorkspace
-from client_tests.test_phase4_harness import OJ, Router, GOOD, BAD, make_agent, events, roles
+from client_tests.test_phase4_harness import OJ, Router, GOOD, BAD, make_agent, events, roles, good_variant
 
 
 @pytest.mark.parametrize('kind,expected,actual,passed', [
@@ -229,7 +229,7 @@ def test_public_metadata_error_prose_never_reaches_trace(tmp_path):
 
 
 def test_generated_checker_reuse_does_not_replace_formal_debug_candidate_identity(tmp_path):
-    router=Router(['plan',GOOD,CHECKER,GOOD])
+    router=Router(['plan',GOOD,CHECKER,good_variant(1)])
     agent,w,oj=make_agent(tmp_path,router,ConstructionOJ(verdicts=['WA','AC'],checker_replies=[True,True,True]))
     assert agent.run_harness_loop().solved
     m=w.state.recovery_metrics

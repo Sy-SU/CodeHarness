@@ -32,6 +32,11 @@ GOOD = "```cpp\n#include <iostream>\nint main(){std::cout << 3;}\n```"
 BAD = "```cpp\n#include <iostream>\nint main(){std::cout << 0;}\n```"
 
 
+def good_variant(index):
+    """Distinct submitted bytes for tests that require another formal evaluation."""
+    return GOOD.replace("int main", f"// candidate {index}\nint main")
+
+
 class Router:
     def __init__(self, contents, *, priced=True, input_price=1, usage=TokenUsage(100, 50)):
         self.contents = iter(contents)
@@ -191,7 +196,8 @@ def test_ok_run_requires_complete_stdout_and_successful_exit(tmp_path, result, t
 
 
 def test_three_failed_debug_candidates_replan_then_code_without_escalation(tmp_path):
-    router = Router(["initial plan", GOOD, GOOD, GOOD, GOOD, "new plan", GOOD])
+    router = Router(["initial plan", *[good_variant(i) for i in range(4)],
+                     "new plan", good_variant(4)])
     oj = OJ(["WA", "WA", "WA", "WA", "AC"])
     policy = ModelPolicy(debug_escalation=DebugEscalationPolicy(
         enabled=True, threshold=1, failure_kinds=frozenset({"WA"})))
@@ -217,7 +223,7 @@ def test_three_failed_debug_candidates_replan_then_code_without_escalation(tmp_p
 
 
 def test_ten_submission_attempts_are_a_hard_cap_across_replans(tmp_path):
-    router = Router([GOOD] * 30)
+    router = Router([good_variant(i) for i in range(30)])
     agent, workspace, oj = make_agent(tmp_path, router, OJ(["WA"] * 20))
     result = agent.run_harness_loop()
     assert result.terminal_status == "budget_exhausted"
@@ -229,7 +235,7 @@ def test_ten_submission_attempts_are_a_hard_cap_across_replans(tmp_path):
 
 
 def test_cost_is_reserved_before_call_and_never_exceeds_one_yuan(tmp_path):
-    router = Router([GOOD] * 30, input_price=10)
+    router = Router([good_variant(i) for i in range(30)], input_price=10)
     agent, workspace, oj = make_agent(tmp_path, router, OJ(["WA"] * 20))
     result = agent.run_harness_loop()
     assert result.terminal_status == "budget_exhausted"
@@ -435,7 +441,7 @@ def test_cli_supports_harness_and_resume_and_guards_before_network():
 
 @pytest.mark.parametrize("verdict", ["WA", "CE", "RE", "TLE", "MLE", "OLE"])
 def test_all_user_program_verdicts_can_debug_and_preserve_machine_feedback(tmp_path, verdict):
-    router = Router(["plan", GOOD, GOOD])
+    router = Router(["plan", GOOD, good_variant(1)])
     oj = OJ([verdict, "AC"])
     agent, workspace, _ = make_agent(tmp_path, router, oj)
     result = agent.run_harness_loop()
@@ -596,7 +602,7 @@ def test_cli_full_harness_task_and_completed_resume(tmp_path, monkeypatch, capsy
 
 
 def test_full_http_adapters_samples_feedback_debug_and_correlated_versions(tmp_path):
-    model_contents = iter(["add integers", BAD, GOOD, GOOD])
+    model_contents = iter(["add integers", BAD, GOOD, good_variant(1)])
     model_requests, oj_requests = [], []
     posts = 0
 

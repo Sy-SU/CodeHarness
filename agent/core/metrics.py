@@ -26,6 +26,7 @@ def recovery_metrics(events, state, *, invalid_lines=0):
     candidates, submissions, results, samples, failures = {}, {}, {}, [], []
     calls, responses, replans, invalid_outputs, custom_runs = {}, {}, 0, 0, 0
     reviews, checker_runs, issues = set(), 0, []
+    reuses = {}
     for index, event in enumerate(events):
         payload = event.get("payload", {})
         kind, correlation = event.get("type"), payload.get("correlation_id")
@@ -68,6 +69,30 @@ def recovery_metrics(events, state, *, invalid_lines=0):
                 if (payload.get("passed") is False and (verified_wrong or verified_program)
                         and payload.get("reason") != "llm_generated_checker_unverified"):
                     failures.append((index, "sample_failure", payload))
+        elif kind == "FORMAL_RESULT_REUSED":
+            version = payload.get("solution_version")
+            candidate = candidates.get(version)
+            identifier = str(payload.get("source_submission_id"))
+            source = results.get(identifier)
+            identity = payload.get("evaluation_identity") or {}
+            observed = (payload.get("observation") or {}).get("final") or {}
+            if (candidate and source and candidate[0] < index and source[0] < index
+                    and version not in reuses and payload.get("formal_submission_reused") is True
+                    and payload.get("observation_source") == "cached_formal_result"
+                    and payload.get("source_sha256") == payload.get("code_sha256")
+                        == candidate[1].get("code_sha256") == source[1].get("code_sha256")
+                        == identity.get("source_sha256")
+                    and payload.get("model_call_id") == candidate[1].get("model_call_id")
+                    and payload.get("source_solution_version") == source[1].get("solution_version")
+                    and payload.get("source_model_call_id") == source[1].get("model_call_id")
+                    and observed.get("submission_id") == identifier
+                    and observed.get("verdict") == source[1].get("verdict")
+                    and identity.get("task_id") == state.get("task_id")
+                    and identity.get("problem_id") == state.get("problem_id")
+                    and payload.get("candidate_duplicate") == (version != source[1].get("solution_version"))):
+                reuses[version] = (index, payload)
+            else:
+                issues.append("cached_formal_candidate_association_invalid")
         elif kind == "TOOL_CALL" and payload.get("tool") == "run_code":
             custom_runs += 1
         elif kind == "REPLAN":
@@ -84,6 +109,14 @@ def recovery_metrics(events, state, *, invalid_lines=0):
                     and all(payload.get(key) == accepted_review[1].get(key)
                             for key in ("solution_version", "code_sha256", "model_call_id"))):
                 reviews.add(identifier)
+            elif (accepted_review and accepted_review[1].get("verdict") == "AC"
+                    and payload.get("formal_submission_reused") is True
+                    and payload.get("solution_version") in reuses
+                    and reuses[payload["solution_version"]][0] < index
+                    and reuses[payload["solution_version"]][1].get("source_submission_id") == identifier
+                    and all(payload.get(key) == reuses[payload["solution_version"]][1].get(key)
+                            for key in ("solution_version", "code_sha256", "model_call_id"))):
+                reviews.add(identifier)
 
     for field, count in (("submission_count", len(submissions)), ("llm_call_count", len(calls)),
                          ("llm_success_count", sum(p.get("status") == "succeeded" for _, p in responses.values())),
@@ -91,6 +124,9 @@ def recovery_metrics(events, state, *, invalid_lines=0):
                          ("custom_run_count", custom_runs)):
         if field in state and state[field] != count:
             issues.append(field + "_trace_mismatch")
+    duplicates = sum(payload.get("candidate_duplicate") is True for _, payload in reuses.values())
+    if "duplicate_candidate_count" in state and state["duplicate_candidate_count"] != duplicates:
+        issues.append("duplicate_candidate_count_trace_mismatch")
 
     ordered = list(submissions)
     first = results.get(ordered[0]) if ordered else None
@@ -116,6 +152,9 @@ def recovery_metrics(events, state, *, invalid_lines=0):
                 and accepted is not None and accepted[1].get("verdict") == "AC"
                 and accepted[1].get("solution_version") == state.get("solution_version")
                 and accepted[1].get("code_sha256") == state.get("solution_sha256"))
+    # A reused acceptance is a real observation, but not a fresh formal result
+    # or proof that the repeated candidate repaired an algorithm.
+    accepted_reuse = reuses.get(state.get("solution_version"))
     relevant, evidence = [], []
     successful_debug = 0
     if final_ac:
@@ -164,6 +203,9 @@ def recovery_metrics(events, state, *, invalid_lines=0):
         "invalid_model_output_count": invalid_outputs,
         "formal_submission_count": len(submissions), "custom_run_count": custom_runs,
         "candidate_version_count": len(candidates),
+        "duplicate_candidate_count": duplicates,
+        "formal_result_reuse_count": len(reuses),
+        "final_formal_result_reused": accepted_reuse is not None,
         "candidate_versions": [payload for _, payload in candidates.values()],
         "recovery_evidence": evidence,
         "llm_checker_call_count": sum(p.get("purpose") == "sample_checker_generation" for _, p in calls.values()),

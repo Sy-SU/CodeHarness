@@ -14,6 +14,7 @@ from agent.core.context import ContextBuilder
 from agent.core.checker import SampleGatePolicy
 from agent.core.harness import HarnessPolicy
 from agent.core.policy import ModelPolicy
+from agent.core.formal_dedup import FORMAL_DEDUP_POLICY
 from agent.models.registry import ModelRegistry
 from agent.models.router import ModelRouter
 from agent.models.types import AgentRole, ModelProfile
@@ -122,6 +123,8 @@ class ExecutionService:
         # silently gain compatibility/filtering; explicit full stays unchanged.
         if request.expected_feedback_mode == "verdict_only":
             snapshot["feedback_policy"] = VERDICT_ONLY_POLICY
+        if request.mode == "harness-loop":
+            snapshot["formal_submission_dedup"] = dict(FORMAL_DEDUP_POLICY)
         if request.contest_id is not None:
             snapshot["contest_id"] = request.contest_id
         if request.sample_checking is not None:

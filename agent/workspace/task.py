@@ -61,6 +61,7 @@ class EventType(str, enum.Enum):
     GENERATED_CHECKER = "GENERATED_CHECKER"
     GENERATED_CHECKER_RESULT = "GENERATED_CHECKER_RESULT"
     CHECKER_RUN = "CHECKER_RUN"
+    FORMAL_RESULT_REUSED = "FORMAL_RESULT_REUSED"
 
 
 @dataclass(frozen=True)
@@ -100,6 +101,7 @@ class TaskState:
     attempt_count: int = 0
     submission_attempt_count: int = 0
     submission_count: int = 0
+    duplicate_candidate_count: int = 0
     last_submission_id: Optional[str] = None
     last_verdict: Optional[str] = None
     last_outcome_kind: Optional[str] = None

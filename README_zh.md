@@ -208,6 +208,8 @@ uv run codeharness-experiment contest-resume 1 --experiment-id contest-1-run-001
 
 State/result、JSON/CSV 与详情页增加 first_try_ac、recovered_to_ac、sample/formal recovery 分类和 DEBUG/重 PLAN/候选/拒绝/无法验证计数。正式修复链必须有关联的程序失败 → 成功 DEBUG → 后续候选 → 正式 AC → REVIEW；基础设施错误与 LLM checker 拒绝不计算法修复。历史工件只读、不回写。
 
+新 Harness 任务按 task/冻结题目/language/实际提交 UTF-8 SHA 去重正式动作。相同源码复用原 submission ID 与冻结策略下的观察，保留本次候选和模型计数，另计 duplicate；不增加正式 POST/GET，不跨 task，不用 Custom Run 填充缓存，不改重 PLAN 规则。checkpoint 与现有 task lock 保证恢复边界。原 Pilot/Qualification 保留，Pilot-v2 尚未执行；本轮本地验证、新 clean preflight 与独立 Gate 见 [正式去重证据](docs/evidence/20261003-formal-dedup.md)。
+
 `config/experiment.small.yaml` 已准备公开 rating 核实的 12 题，1200/1400/1600/1800 各 3 题，原五组、各一次，共 60 个独立任务。**以下准备命令不执行这些任务。**
 
 ```bash

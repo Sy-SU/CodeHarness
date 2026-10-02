@@ -35,6 +35,12 @@ def audit_trace(workspace, state):
     for field, value in checks.items():
         if state.get(field) != value:
             warnings.append(f"{field}_mismatch")
+    if "duplicate_candidate_count" in state:
+        count = sum(e.get("type") == "FORMAL_RESULT_REUSED"
+                    and e["payload"].get("candidate_duplicate") is True for e in events)
+        checks["duplicate_candidate_count"] = count
+        if state["duplicate_candidate_count"] != count:
+            warnings.append("duplicate_candidate_count_mismatch")
     if dict(Counter(p.get("profile") for p in calls)) != state.get("calls_per_model_profile", {}):
         warnings.append("profile_call_counts_mismatch")
     reserved = sum(e["payload"].get("reserved_cny", 0) for e in events if e.get("type") == "BUDGET_RESERVATION")
@@ -194,7 +200,8 @@ def summarize_rows(rows):
             result[-1][metric + "_count"] = sum(t.get(metric) is True for t in tasks)
             result[-1][metric + "_unknown_count"] = sum(t.get(metric) is None for t in tasks)
         for metric in ("successful_debug_count", "sample_gate_reject_count", "sample_check_unverifiable_count",
-                       "invalid_model_output_count", "formal_submission_count", "candidate_version_count"):
+                       "invalid_model_output_count", "formal_submission_count", "candidate_version_count",
+                       "duplicate_candidate_count", "formal_result_reuse_count"):
             result[-1][metric] = known_sum(metric)
         result[-1]["recovery_types"] = dict(Counter(kind for t in tasks for kind in t.get("recovery_type", [])))
         result[-1]["official_performance"] = None

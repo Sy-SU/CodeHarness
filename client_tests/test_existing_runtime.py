@@ -118,7 +118,8 @@ def test_code_only_has_one_model_call_submission_and_no_feedback(tmp_path):
 
 def test_harness_retries_without_escalation_and_records_required_trace_events(tmp_path):
     oj = FakeOJ(["WA", "WA", "AC"])
-    router = FakeRouter(["Use addition.", CPP_BAD, CPP_BAD, CPP_GOOD, "Looks correct."])
+    revised_bad = CPP_BAD.replace("int main", "// second candidate\nint main")
+    router = FakeRouter(["Use addition.", CPP_BAD, revised_bad, CPP_GOOD, "Looks correct."])
     policy = ModelPolicy(
         debug_escalation=DebugEscalationPolicy(
             enabled=True,

@@ -23,6 +23,7 @@ from .budget import BudgetStopped, reserve_model_cost, validate_usage
 from .budget_diagnostics import prompt_breakdown
 from .checker import CheckerSpec, SampleGatePolicy, check_run
 from .generated_checker import checker_messages, checker_stdin, generated_decision
+from .formal_dedup import FORMAL_DEDUP_POLICY, cached_observation, evaluation_identity, stable_hash
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,7 @@ class HarnessLoop:
         self.started = time.monotonic()
         self.agent.started = self.started - self.base_seconds
         self.checkpoint: Dict[str, Any] = {}
+        self.formal_dedup_enabled = True
 
     def _snapshot_config(self):
         routes = {}
@@ -125,6 +127,8 @@ class HarnessLoop:
         if self.agent.sample_checking is not None:
             config["sample_comparison"] = "sample_check_v1"
             config["sample_checking"] = self.agent.sample_checking.as_dict()
+        if self.formal_dedup_enabled:
+            config["formal_submission_dedup"] = dict(FORMAL_DEDUP_POLICY)
         return config
 
     def _resolve_checker(self):
@@ -258,6 +262,7 @@ class HarnessLoop:
         self.checkpoint["sample_index"] = 0
         self.checkpoint["sample_results"] = []
         self.checkpoint["pending_sample_run"] = None
+        self.checkpoint["active_formal_identity"] = None
         self.workspace.write_json("artifacts/code-version.json", self._links())
         self.workspace.trace.append("CODE_VERSION", self._links(),
                                     correlation_id=self.state.solution_model_call_id)
@@ -441,20 +446,111 @@ class HarnessLoop:
         else:
             raise HarnessStopped("sample_check_unverifiable", self.checkpoint["sample_results"][-1]["reason"])
 
+    def _formal_identity(self, code):
+        identity = evaluation_identity(self.state.task_id, self.state.problem_id,
+            self.checkpoint["problem"], code)
+        frozen = self.checkpoint.setdefault("formal_problem_sha256", identity["frozen_problem_sha256"])
+        if frozen != identity["frozen_problem_sha256"]:
+            raise ValueError("Frozen formal problem identity changed")
+        return identity, stable_hash(identity)
+
+    def _formal_entry(self):
+        return self.checkpoint.get("formal_evaluations", {}).get(
+            self.checkpoint.get("active_formal_identity")) if self.formal_dedup_enabled else None
+
+    def _bind_formal_submission(self, entry):
+        self.state.last_submission_id = entry["submission_id"]
+        self.state.last_submission_solution_version = entry["submission_links"]["solution_version"]
+        self.state.last_submission_code_sha256 = entry["identity"]["source_sha256"]
+
+    def _reuse_formal_result(self, entry, identity):
+        final, feedback = cached_observation(entry, identity, self.state.feedback_policy)
+        if final.verdict not in {"AC", "IE"} and feedback is None:
+            raise HarnessStopped("result_unknown", "cached_formal_feedback_missing")
+        self._bind_formal_submission(entry)
+        self.state.last_verdict = final.verdict
+        self.state.last_outcome_kind = final.outcome_kind.value
+        version = self.state.solution_version
+        reuses = self.checkpoint.setdefault("formal_result_reuses", {})
+        duplicate = version != entry["submission_links"]["solution_version"]
+        previous = reuses.get(version)
+        if previous is not None and (previous.get("evaluation_identity") != identity
+                or previous.get("source_submission_id") != final.submission_id):
+            raise ValueError("Cached formal reuse association mismatch")
+        if version not in reuses:
+            self.state.duplicate_candidate_count += int(duplicate)
+        # Persist only the permitted view when reading an older/richer local cache.
+        entry["final"] = final.as_dict()
+        entry["feedback"] = feedback.as_dict() if feedback else None
+        # Rebuild the visible receipt from the newly projected view even when a
+        # previous receipt survived a crash; never copy richer disk observations.
+        reuses[version] = {"candidate_duplicate": duplicate, "formal_submission_reused": True,
+            "observation_source": "cached_formal_result", "source_sha256": identity["source_sha256"],
+            "evaluation_identity": identity, "source_submission_id": final.submission_id,
+            "source_solution_version": entry["submission_links"]["solution_version"],
+            "source_model_call_id": entry["submission_links"].get("model_call_id"),
+            **self._links(), "observation": {"final": final.as_dict(),
+                "feedback": feedback.as_dict() if feedback else None}}
+        payload = reuses[version]
+        self._save()  # Counter and reuse decision survive interruption before Trace.
+        # Checkpoint is authoritative. Reconcile an append completed just before
+        # a crash without duplicating the same iteration's reuse event/counter.
+        from .metrics import trace_events
+        events, _ = trace_events(self.workspace.read_text("events.jsonl"))
+        if not any(event["type"] == "FORMAL_RESULT_REUSED"
+                   and event["payload"].get("solution_version") == version for event in events):
+            self.workspace.trace.append("FORMAL_RESULT_REUSED", payload,
+                correlation_id=self.state.solution_model_call_id)
+        self.workspace.write_json(f"artifacts/formal-reuses/{version}.json", payload)
+        if final.verdict == "AC":
+            self.checkpoint["review_reason"] = "cached_judge_accepted"
+            self._transition("REVIEW")
+        elif final.verdict == "IE":
+            raise HarnessStopped("remote_infrastructure_failure", "judge_ie")
+        else:
+            self._failure(feedback.as_dict())
+
     def _submit(self):
         self._guard()
+        code = self._code()
+        entry = None
+        if self.formal_dedup_enabled:
+            identity, key = self._formal_identity(code)
+            entries = self.checkpoint.setdefault("formal_evaluations", {})
+            entry = entries.get(key)
+            self.checkpoint["active_formal_identity"] = key
+            if entry is not None:
+                if entry.get("identity") != identity or entry.get("feedback_policy") != self.state.feedback_policy:
+                    raise ValueError("Cached formal evaluation identity/policy mismatch")
+                if entry.get("final") is not None:
+                    return self._reuse_formal_result(entry, identity)
+                if entry.get("submission_id"):
+                    if entry["submission_links"]["solution_version"] != self.state.solution_version:
+                        raise HarnessStopped("result_unknown", "cached_formal_result_pending")
+                    self._bind_formal_submission(entry)
+                    self.checkpoint["test_stage"] = "wait"
+                    self._save()
+                    return
+                raise HarnessStopped("result_unknown", "previous_formal_submission_unknown_not_reissued")
         if self.state.submission_attempt_count >= self.policy.max_submissions:
             raise HarnessStopped("budget_exhausted", "submission_limit")
+        if self.formal_dedup_enabled:
+            entry = {"identity": identity, "submission_links": self._links(),
+                "feedback_policy": self.state.feedback_policy, "submission_id": None,
+                "created": None, "final": None, "feedback": None}
+            entries[key] = entry
         self.state.submission_attempt_count += 1
         self.checkpoint["pending_operation"] = {"kind": "submission", **self._links()}
         self._save()
         created = self.agent.tools.call(
-            "submit_solution", problem_id=self.state.problem_id, code=self._code()
+            "submit_solution", problem_id=self.state.problem_id, code=code
         )
         self.state.submission_count += 1
         self.state.last_submission_id = created.submission_id
         self.state.last_submission_solution_version = self.state.solution_version
         self.state.last_submission_code_sha256 = self.state.solution_sha256
+        if entry is not None:
+            entry.update(submission_id=created.submission_id, created=created.as_dict())
         self.checkpoint["pending_operation"] = None
         self.checkpoint["test_stage"] = "wait"
         self._save()  # Persist known ID before any polling or optional artifacts.
@@ -480,6 +576,9 @@ class HarnessLoop:
                                   kind=ClientErrorKind.PROTOCOL, method="GET", path="submission")
         self.state.last_verdict = final.verdict
         self.state.last_outcome_kind = final.outcome_kind.value
+        entry = self._formal_entry()
+        if entry is not None:
+            entry["final"] = final.as_dict()
         payload = {**final.as_dict(), "outcome_kind": final.outcome_kind.value, **self._links()}
         key = quote(submission_id, safe="")
         self.workspace.write_json(f"artifacts/submissions/{key}-final.json", payload)
@@ -499,6 +598,9 @@ class HarnessLoop:
         if feedback.verdict != self.state.last_verdict:
             raise OJProtocolError("Feedback verdict does not match final submission",
                                   kind=ClientErrorKind.PROTOCOL, method="GET", path="feedback")
+        entry = self._formal_entry()
+        if entry is not None:
+            entry["feedback"] = feedback.as_dict()
         payload = {**feedback.as_dict(), "submission_id": self.state.last_submission_id,
                    **self._links()}
         key = quote(self.state.last_submission_id, safe="")
@@ -510,6 +612,13 @@ class HarnessLoop:
         self._code()  # Verify the immutable candidate and the judged hash.
         matched = (self.state.solution_sha256 == self.state.last_submission_code_sha256
                    and self.state.solution_version == self.state.last_submission_solution_version)
+        reused = self.checkpoint.get("formal_result_reuses", {}).get(self.state.solution_version)
+        if reused is not None:
+            identity, _ = self._formal_identity(self._code())
+            final, _ = cached_observation(self._formal_entry(), identity, self.state.feedback_policy)
+            matched = (final.submission_id == self.state.last_submission_id
+                and self.state.solution_sha256 == self.state.last_submission_code_sha256
+                and reused["evaluation_identity"] == identity)
         accepted = self.state.last_verdict == "AC" and matched
         self.workspace.write_text(
             "artifacts/review.md",
@@ -523,7 +632,9 @@ class HarnessLoop:
         if not accepted:
             raise HarnessStopped("internal_failure", "review_judged_code_mismatch")
         self.workspace.trace.append("REVIEW_RESULT", {"matched": matched,
-            "submission_id": self.state.last_submission_id, **self._links()})
+            "submission_id": self.state.last_submission_id, **self._links(),
+            **({"formal_submission_reused": True, "source_solution_version": reused["source_solution_version"]}
+               if reused is not None else {})})
         return self._finish("accepted", "judge_accepted")
 
     def _finish(self, status, reason, error_kind=None):
@@ -552,6 +663,7 @@ class HarnessLoop:
             self.started = time.monotonic()
             self.agent.started = self.started - self.base_seconds
             self.checkpoint = self.workspace.read_json("checkpoint.json")
+            self.formal_dedup_enabled = "formal_submission_dedup" in self.checkpoint["config"]
             # Old checkpoints retain their original comparison, without an upgrade.
             if "sample_checking" not in self.checkpoint["config"]:
                 if self.agent.sample_checking is not None and self.agent.sample_checking_explicit:
@@ -627,6 +739,8 @@ class HarnessLoop:
                         if problem.problem_id != self.state.problem_id:
                             raise ValueError("Fetched problem identity mismatch")
                         self.checkpoint["problem"] = problem.as_dict()
+                        if self.formal_dedup_enabled:
+                            self.checkpoint["formal_problem_sha256"] = stable_hash(problem.as_dict())
                         self.state.public_sample_count = len(problem.samples)
                         self._resolve_checker()
                         self.workspace.write_json("problem.json", problem.as_dict())
