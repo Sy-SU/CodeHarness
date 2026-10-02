@@ -1,0 +1,62 @@
+# Explicit infrastructure qualification settings; preserves selected model IDs, prices and generation parameters.
+# timeout_seconds applies to connect/read/write/pool inactivity, not an overall wall deadline.
+# input_reservation_boundary is the local conservative token/cost cap, not provider context/max input.
+providers:
+  bailian:
+    type: openai-compatible
+    base_url_env: BAILIAN_BASE_URL
+    api_key_env: BAILIAN_API_KEY
+    timeout_seconds: 600
+    supported_parameters:
+    - max_tokens
+    - enable_thinking
+models:
+  fast:
+    provider: bailian
+    model: qwen3.5-flash
+    input_cost_per_million: 0.2
+    output_cost_per_million: 2
+    currency: CNY
+    input_token_limit: 32768
+    parameters:
+      max_tokens: 8192
+      enable_thinking: false
+  standard:
+    provider: bailian
+    model: qwen3.8-flash
+    input_cost_per_million: 0.8
+    output_cost_per_million: 2.7
+    currency: CNY
+    parameters:
+      max_tokens: 8192
+      enable_thinking: false
+    input_reservation_boundary: 65536
+  strong:
+    provider: bailian
+    model: qwen3.7-plus
+    input_cost_per_million: 2
+    output_cost_per_million: 8
+    currency: CNY
+    parameters:
+      max_tokens: 8192
+      enable_thinking: false
+    input_reservation_boundary: 65536
+  max:
+    provider: bailian
+    model: qwen3.8-max
+    input_cost_per_million: 12
+    output_cost_per_million: 36
+    currency: CNY
+    input_token_limit: 32768
+    parameters:
+      max_tokens: 8192
+      enable_thinking: false
+policy:
+  roles:
+    PLAN: strong
+    CODE: standard
+    TEST_GENERATION: strong
+    DEBUG: standard
+    REVIEW: strong
+  debug_escalation:
+    enabled: false

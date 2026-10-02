@@ -5,8 +5,8 @@
 ## 下一步，均需后续显式授权，不自动执行
 
 - [ ] **1. explicit live checker smoke**：验证 LLM checker 的真实生成与 MiniOJ 远程执行。保持 `llm_generated_unverified`；拒绝不 DEBUG，reference sanity 不代表认证。
-- [ ] **2. explicit live provider probe if required**：两款模型仅可见性已确认；8192 输出及实际输入/context 上限需独立证据，当前 needs_live_probe=true。价格/账单核验另保留来源；不能把 configured 当 verified，不修改用户配置。
-- [ ] **3. 15-task pilot**：`config/experiment.pilot.yaml` 的 3 题 × 五组，使用匹配的新 preflight/运行 ID，验证 routing、feedback、checker、费用、报告、recovery 与 resume；不据此得实验结论。
+- [ ] **2. provider 极限与账单确认（可独立开展）**：连通性 probe 与原 Pilot 已有真实调用证据；供应商最大输入/context 和正式价格仍未核实。新 `input_reservation_boundary` 显式表示本地预留，不冒充 context。账单不可得保持 null，不阻塞已通过的 infrastructure qualification；不构造超大付费 prompt。
+- [ ] **3. 完整 Pilot-v2（需后续授权）**：原 15-task Pilot 为 `PILOT_VALIDATED_WITH_WARNINGS`，6 次 transport failure 与本地输入预留停止需独立 Infrastructure Qualification。诊断/新配置与独立 Gate 入口见 [证据](docs/evidence/20261002-infrastructure-qualification.md)。Qualification 通过后 `config/experiment.pilot-v2.yaml` 保持原 3 题 × 五组，使用新 clean preflight 与运行 ID 完整执行 15 任务；不得补跑旧 6 题拼接结果，不据此得主实验结论。
 - [ ] **4. 60-task main experiment**：`config/experiment.small.yaml` 保持 12 题 × 原五组 × 1 次，按冻结顺序及现有显式确认机制执行。60 CNY 是分配上限；不补跑历史失败。
 
 ## 仍需独立确认

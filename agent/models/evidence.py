@@ -5,6 +5,8 @@ def model_evidence(definition):
         "provider": definition.provider, "model_id": definition.model,
         "configured_context_limit": None,
         "configured_input_token_limit": definition.input_token_limit,
+        "configured_input_reservation_boundary": definition.input_token_limit,
+        "input_limit_semantics": "local_conservative_reservation_boundary_not_provider_input_or_context_limit",
         "configured_max_output_tokens": definition.parameters.get("max_tokens"),
         "configured_input_price": definition.input_cost_per_million,
         "configured_output_price": definition.output_cost_per_million,

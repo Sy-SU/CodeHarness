@@ -345,11 +345,15 @@ class CodingAgent:
         self._phase("CODE")
         messages = self.context_builder.build(problem=problem.as_dict(), role=AgentRole.CODE)
         from .budget import BudgetStopped, reserve_model_cost, validate_usage
+        from .budget_diagnostics import prompt_breakdown
         try:
             if budget_policy is not None:
                 input_limit, output_limit, reserved = reserve_model_cost(
                     self.router.route(profile), messages, self.workspace.state,
-                    budget_policy.max_cost_cny)
+                    budget_policy.max_cost_cny,
+                    components=prompt_breakdown(messages, role="CODE"),
+                    audit=lambda data: self.workspace.trace.append("MODEL_BUDGET_CHECK",
+                        {"role": "CODE", "profile": profile.value, **data}))
                 self.workspace.save_state()
                 self.workspace.trace.append("BUDGET_RESERVATION", {
                     "role": "CODE", "profile": profile.value, "reserved_cny": reserved,

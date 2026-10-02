@@ -55,6 +55,8 @@ def configured_models(config, registry, policy):
             "verified": {**{name: None for name in VERIFIED_FIELDS},
                          "verification_source": None, "verified_at": None, "field_sources": {}},
             "needs_live_probe": True, "warnings": []})
+        if hasattr(provider, "transport_metadata"):
+            snapshots[-1]["configured"]["provider_transport"] = provider.transport_metadata
     return snapshots, conditions
 
 

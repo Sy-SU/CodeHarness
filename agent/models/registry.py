@@ -36,6 +36,11 @@ class ModelDefinition:
     input_token_limit: Optional[int] = None
 
     @property
+    def input_reservation_boundary(self):
+        """Local UTF-8 upper-bound/cost cap; legacy field is not a provider limit."""
+        return self.input_token_limit
+
+    @property
     def pricing_known(self) -> bool:
         return (
             self.input_cost_per_million is not None
@@ -191,7 +196,9 @@ class ModelRegistry:
                 {} if parameter_value is None else parameter_value,
                 f"Parameters for {profile.value}",
             )
-            input_token_limit = config.get("input_token_limit")
+            if "input_token_limit" in config and "input_reservation_boundary" in config:
+                raise ModelConfigurationError("Choose input_reservation_boundary or legacy input_token_limit, not both")
+            input_token_limit = config.get("input_reservation_boundary", config.get("input_token_limit"))
             if input_token_limit is not None and (
                 isinstance(input_token_limit, bool)
                 or not isinstance(input_token_limit, int)

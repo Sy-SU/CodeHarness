@@ -20,6 +20,7 @@ from agent.workspace.task import TaskWorkspace
 
 from .agent import AgentResult, AgentTerminalStatus, extract_cpp, problem_markdown
 from .budget import BudgetStopped, reserve_model_cost, validate_usage
+from .budget_diagnostics import prompt_breakdown
 from .checker import CheckerSpec, SampleGatePolicy, check_run
 from .generated_checker import checker_messages, checker_stdin, generated_decision
 
@@ -173,7 +174,7 @@ class HarnessLoop:
         if maximum is not None and self.state.wall_clock_seconds >= maximum:
             raise HarnessStopped("budget_exhausted", "wall_clock_limit")
 
-    def _reserve_model(self, role, messages):
+    def _reserve_model(self, role, messages, *, components=None):
         self._guard()
         if self.state.llm_call_count >= self.policy.max_llm_calls:
             raise HarnessStopped("budget_exhausted", "llm_call_limit")
@@ -181,7 +182,9 @@ class HarnessLoop:
         profile = self.agent.policy.choose(role, allow_escalation=False)
         route = self.agent.router.route(profile)
         input_limit, output_limit, bound = reserve_model_cost(
-            route, messages, self.state, self.policy.max_cost_cny)
+            route, messages, self.state, self.policy.max_cost_cny, components=components,
+            audit=lambda data: self.workspace.trace.append("MODEL_BUDGET_CHECK",
+                {"role": role.value, "profile": profile.value, **data}))
         if role is AgentRole.DEBUG:
             self.state.debug_iterations += 1
         self.checkpoint["pending_operation"] = {"kind": "model", "role": role.value}
@@ -209,7 +212,9 @@ class HarnessLoop:
             feedback=self.checkpoint["feedback"],
             recent_history=self.checkpoint["history"],
         )
-        profile, input_limit, output_limit = self._reserve_model(role, messages)
+        components = prompt_breakdown(messages, role=role.value, plan=self.checkpoint["plan"],
+            current_solution=code, feedback=self.checkpoint["feedback"], recent_history=self.checkpoint["history"])
+        profile, input_limit, output_limit = self._reserve_model(role, messages, components=components)
         # Runtime increments the attempt before network. Checkpoint recovery reconciles it.
         response = self.agent.model_runtime.complete(role, profile, messages)
         self.workspace.write_json(

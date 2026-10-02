@@ -17,6 +17,7 @@ from .types import (
     ModelProfile,
     TokenUsage,
 )
+from .transport import TransportObservation
 
 
 class ModelProviderError(RuntimeError):
@@ -67,6 +68,12 @@ class OpenAICompatibleProvider:
             f"base_url={self.base_url!r}, timeout_seconds={self.timeout_seconds!r})"
         )
 
+    @property
+    def transport_metadata(self):
+        return {"schema_version": "provider_transport_v1", "timeouts": self.client.timeout.as_dict(),
+            "configured_timeout_seconds": self.timeout_seconds, "overall_request_deadline_seconds": None,
+            "model_response_streaming": False, "automatic_retries": 0}
+
     @staticmethod
     def _latency_ms(started: float) -> int:
         return max(0, round((time.monotonic() - started) * 1000))
@@ -90,6 +97,9 @@ class OpenAICompatibleProvider:
         status_code: Optional[int] = None,
         retryable: bool = False,
         request_id: Optional[str] = None,
+        transport_diagnostics=None,
+        actual_response_model=None,
+        usage_metadata=None,
     ) -> LLMResponse:
         return LLMResponse.failure(
             provider=self.name,
@@ -103,6 +113,9 @@ class OpenAICompatibleProvider:
             ),
             request_id=request_id,
             latency_ms=self._latency_ms(started),
+            transport_diagnostics=transport_diagnostics,
+            actual_response_model=actual_response_model,
+            usage_metadata=usage_metadata,
         )
 
     @staticmethod
@@ -170,13 +183,31 @@ class OpenAICompatibleProvider:
             **dict(parameters),
         }
         started = time.monotonic()
+        request = self.client.build_request("POST", f"{self.base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {self._api_key}"}, json=payload)
+        observation = TransportObservation(timeout=request.extensions.get("timeout", {}),
+            request_bytes=len(request.content), started=started)
+        request.extensions["trace"] = observation.trace
         try:
-            response = self.client.post(
-                f"{self.base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                json=payload,
-            )
-        except httpx.HTTPError:
+            response = self.client.send(request, stream=True)
+            wire_response = response
+            try:
+                observation.headers(response.status_code)
+                if response.is_stream_consumed:
+                    observation.body(len(response.content))
+                else:
+                    chunks = []
+                    # Preserve encoding headers and decode exactly once when
+                    # materializing the response; count raw transport bytes.
+                    for chunk in response.iter_raw():
+                        observation.body(len(chunk))
+                        chunks.append(chunk)
+                    response = httpx.Response(response.status_code, headers=response.headers,
+                        content=b"".join(chunks), request=request, extensions=response.extensions)
+                observation.data["body_complete"] = True
+            finally:
+                wire_response.close()
+        except httpx.HTTPError as exc:
             return self._failure(
                 model=model,
                 profile=profile,
@@ -184,7 +215,11 @@ class OpenAICompatibleProvider:
                 message=f"{self.name} model transport failed",
                 started=started,
                 retryable=True,
+                transport_diagnostics=observation.finish(category=observation.error_category(exc), error=exc),
             )
+        except KeyboardInterrupt as exc:
+            self.last_transport_diagnostics = observation.finish(category="local_cancellation", error=exc)
+            raise
 
         if not 200 <= response.status_code < 300:
             status = response.status_code
@@ -197,6 +232,8 @@ class OpenAICompatibleProvider:
                 status_code=status,
                 retryable=status in {408, 409, 425, 429} or status >= 500,
                 request_id=self._request_id(response),
+                transport_diagnostics=observation.finish(category="rate_limit" if status == 429 else
+                    "provider_5xx" if status >= 500 else "provider_http_error"),
             )
 
         try:
@@ -232,6 +269,9 @@ class OpenAICompatibleProvider:
                 finish_reason=finish_reason,
                 tool_calls=tool_calls,
                 latency_ms=self._latency_ms(started),
+                actual_response_model=body.get("model") if isinstance(body.get("model"), str) else None,
+                usage_metadata=_numeric_usage(body.get("usage")),
+                transport_diagnostics=observation.finish(),
             )
         except (json.JSONDecodeError, TypeError, ValueError, KeyError, IndexError):
             return self._failure(
@@ -241,4 +281,13 @@ class OpenAICompatibleProvider:
                 message=f"{self.name} model response did not match the configured protocol",
                 started=started,
                 request_id=self._request_id(response),
+                transport_diagnostics=observation.finish(category="protocol_failure"),
             )
+
+
+def _numeric_usage(value):
+    """Keep token counters only; supplier prose cannot enter diagnostics."""
+    if not isinstance(value, dict):
+        return {}
+    return {key: _numeric_usage(item) if isinstance(item, dict) else item
+        for key, item in value.items() if isinstance(item, (dict, int, float)) and not isinstance(item, bool)}

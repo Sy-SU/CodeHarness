@@ -105,6 +105,8 @@ class ExecutionService:
             routes[role.value] = {"profile": profile.value, **asdict(definition),
                 "provider_endpoint_sha256": fingerprint(getattr(provider, "base_url", "test-double")),
                 "provider_timeout_seconds": getattr(provider, "timeout_seconds", None)}
+            if hasattr(provider, "transport_metadata"):
+                routes[role.value]["provider_transport"] = provider.transport_metadata
         snapshot = {"schema_version": "phase5-v1", "mode": request.mode, "routes": routes,
             "role_mapping": {r.value: p.value for r, p in policy.mapping.items()},
             "model_escalation": False, "test_generation": False,

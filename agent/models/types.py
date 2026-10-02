@@ -92,6 +92,9 @@ class LLMResponse:
     tool_calls: Tuple[LLMToolCall, ...] = field(default_factory=tuple)
     error: Optional[LLMError] = None
     latency_ms: Optional[int] = None
+    actual_response_model: Optional[str] = None
+    usage_metadata: Dict[str, Any] = field(default_factory=dict)
+    transport_diagnostics: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.profile, ModelProfile):
@@ -122,6 +125,9 @@ class LLMResponse:
         request_id: Optional[str] = None,
         latency_ms: Optional[int] = None,
         usage: Optional[TokenUsage] = None,
+        actual_response_model: Optional[str] = None,
+        usage_metadata: Optional[Dict[str, Any]] = None,
+        transport_diagnostics: Optional[Dict[str, Any]] = None,
     ) -> "LLMResponse":
         return cls(
             content="",
@@ -133,6 +139,9 @@ class LLMResponse:
             status=LLMCallStatus.FAILED,
             error=error,
             latency_ms=latency_ms,
+            actual_response_model=actual_response_model,
+            usage_metadata=usage_metadata or {},
+            transport_diagnostics=transport_diagnostics or {},
         )
 
 

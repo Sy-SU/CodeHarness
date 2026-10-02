@@ -93,6 +93,14 @@ class ModelCallRuntime:
         started = time.monotonic()
         try:
             response = self.router.complete(profile, messages)
+        except KeyboardInterrupt:
+            registry = getattr(self.router, "registry", None)
+            provider = registry.provider(route.provider) if registry is not None else None
+            self.workspace.trace.append("LLM_TRANSPORT_DIAGNOSTICS", {
+                "role": role.value, "profile": profile.value,
+                "transport_diagnostics": getattr(provider, "last_transport_diagnostics", {}),
+            }, correlation_id=call_id)
+            raise
         except Exception:
             response = LLMResponse.failure(
                 provider=route.provider,
@@ -141,6 +149,9 @@ class ModelCallRuntime:
                 "finish_reason": response.finish_reason,
                 "tool_calls": [asdict(item) for item in response.tool_calls],
                 "latency_ms": response.latency_ms,
+                "actual_response_model": response.actual_response_model,
+                "usage_metadata": response.usage_metadata,
+                "transport_diagnostics": response.transport_diagnostics,
                 "cost_estimate": asdict(cost),
                 "error": asdict(response.error) if response.error is not None else None,
                 "content": response.content,
