@@ -1,0 +1,85 @@
+{
+  "schema_version": "pilot_minioj_smoke_v1",
+  "plan": {
+    "purpose": "controlled_token_echo_only",
+    "source_code": "#include <iostream>\n#include <string>\nint main() {\n    std::string token;\n    while (std::cin >> token) std::cout << \"\\t \" << token << \" \\n\";\n    return 0;\n}\n",
+    "stdin": "CODEHARNESS_TOKEN_A CODEHARNESS_TOKEN_B 42\n",
+    "pilot_send_custom_run_code_alias": false,
+    "maximum_custom_run_posts": 2,
+    "fallback_only_on_confirmed_missing_code_422": true,
+    "formal_submissions": 0,
+    "algorithm_tasks": 0,
+    "llm_calls": 0,
+    "formal_reads_of_existing_submission": "103",
+    "git_sha": "08a035236fafbce81776f463a87702c12df1bcd2",
+    "runtime_source_hash": "fa79ce3f96444c6a877b178bdc7520113dfa07f8db13aee39c5da34edbce1271",
+    "experiment_config_file_hash": "34576cb65193b244ca2f5f2107d9183704032f3bf86dd1cd7be7195c533eb2cd",
+    "script_sha256": "2f47f1438a4d9c4fff4a10d4a1b202fca2c261496dbe2d61e7a761a22679b1f3"
+  },
+  "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+  "source": {
+    "git_sha": "08a035236fafbce81776f463a87702c12df1bcd2",
+    "runtime_source_hash": "fa79ce3f96444c6a877b178bdc7520113dfa07f8db13aee39c5da34edbce1271",
+    "experiment_config_file_hash": "34576cb65193b244ca2f5f2107d9183704032f3bf86dd1cd7be7195c533eb2cd",
+    "script_sha256": "2f47f1438a4d9c4fff4a10d4a1b202fca2c261496dbe2d61e7a761a22679b1f3"
+  },
+  "custom_run_contract": {
+    "source": "GET /openapi.json#/paths/~1api~1v1~1runs/post",
+    "required": [],
+    "properties": [
+      "code",
+      "language",
+      "source_code",
+      "stdin"
+    ],
+    "schema_sha256": "4e96a8a72165f6c378a43c277e2311ffc868846f180ba640ac171ad638d57de3"
+  },
+  "feedback_mode": {
+    "mode": "full",
+    "source": "GET /api/v1/me#feedback_mode",
+    "status": "confirmed"
+  },
+  "feedback_compatible": true,
+  "effective_feedback_mode": "verdict_only",
+  "feedback_policy": "formal_verdict_only_v1",
+  "live_smoke_status": "FAILED",
+  "exception_class": "RuntimeError",
+  "request_ledger": [
+    {
+      "method": "GET",
+      "path": "/openapi.json",
+      "at": "2026-10-02T12:53:56.403976+00:00",
+      "payload_keys": [],
+      "http_status": 200,
+      "response_body_sha256": "3179d3deb4a0e4b69ce37d4f5f080479da7004e82c563ed05ed4fe950fb8b746"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/me",
+      "at": "2026-10-02T12:53:56.513245+00:00",
+      "payload_keys": [],
+      "http_status": 200,
+      "response_body_sha256": "fd0cdd0eac9e26d2ad60963681ad9b5382c6cb05de81fbb5a06e1609eb9fa51c"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/submissions/103",
+      "at": "2026-10-02T12:53:56.533357+00:00",
+      "payload_keys": [],
+      "http_status": 200,
+      "response_body_sha256": "10d81f58116634fa924e58c6847c18208a49edca92b1b8f6a1708492ca8e0c64",
+      "raw_field_count": 10,
+      "raw_summary_present": false,
+      "raw_details_present": false
+    }
+  ],
+  "counts": {
+    "llm_calls": 0,
+    "formal_submissions": 0,
+    "algorithm_tasks": 0,
+    "custom_run_post_attempts": 0,
+    "successful_custom_run_responses": 0,
+    "automatic_retries": 0
+  },
+  "observed_at": "2026-10-02T12:53:56.549930+00:00"
+}

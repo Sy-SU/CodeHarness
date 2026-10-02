@@ -1,0 +1,205 @@
+{
+  "schema_version": "pilot_execution_readiness_evidence_v1",
+  "status": "NOT_READY",
+  "execution_authorized": false,
+  "created_at": "2026-10-02T12:58:54.658732+00:00",
+  "reason": "The required actual billed cost has not been observed. Successful calls return usage but no billing fields. Computed tariffs are not settled charges.",
+  "blockers": [
+    {
+      "code": "actual_provider_billed_cost_unverified",
+      "models": [
+        "qwen3.8-flash",
+        "qwen3.7-plus"
+      ],
+      "actual_billed_cost_cny": null,
+      "source": "provider-probe.json#results[].billing_fields_present",
+      "required_evidence": "provider/account billing evidence attributable to these request IDs; no further model call is needed"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "sampling_defaults_not_frozen_explicitly",
+      "details": "Both parameters are omitted; official defaults 0.7/0.8 are documented, not response-echoed."
+    },
+    {
+      "code": "full_length_limits_not_live_exercised",
+      "details": "8192 output request accepted; only 29 input / 1 output tokens observed per model; documented limits are separate."
+    },
+    {
+      "code": "projected_verdict_only",
+      "details": "Actual full; effective verdict_only via formal_verdict_only_v1. Native verdict_only was not observed."
+    },
+    {
+      "code": "official_discount_and_account_billing_can_differ",
+      "details": "Strong has a documented 0.8 promotion; account quota/resource offsets and settled amount are unknown."
+    },
+    {
+      "code": "preflight_metadata_verified_fields_stay_unknown",
+      "details": "Base GET /models preflight does not import manual documentation or this probe; its verified price/context/output fields remain null."
+    }
+  ],
+  "checks": {
+    "implementation_committed": true,
+    "full_pytest": {
+      "passed": 579
+    },
+    "provider_single_attempt_per_model": true,
+    "actual_model_ids_observed": true,
+    "usage_metadata_observed": true,
+    "configured_parameters_accepted": true,
+    "current_pilot_custom_run_path": true,
+    "token_checker_live_smoke": true,
+    "feedback_projection_live_get": true,
+    "actual_billed_cost_observed": false
+  },
+  "source_probed": {
+    "git_sha": "08a035236fafbce81776f463a87702c12df1bcd2",
+    "runtime_source_hash": "fa79ce3f96444c6a877b178bdc7520113dfa07f8db13aee39c5da34edbce1271",
+    "model_config_file_hash": "e515fd243f542ff11471829147e7ffa62c21bef6d22b24090d6f300679d06316",
+    "script_sha256": "710a4c9b78fe9fad6832cc183822ca25dc3c26dffcf9ef5961f4ca631da3522d"
+  },
+  "frozen_preflight_target": {
+    "preflight_id": "pilot-preflight-20261002-clean",
+    "directory": "workspace/.experiments/pilot-preflight-20261002-clean/preflight",
+    "final_binding": "workspace/.pilot-validation/pilot-gate-20261002/readiness.json",
+    "rule": "Generate after the evidence commit is clean; final binding records that commit and the new fingerprint. Do not reuse the probe source commit or older dirty preflight."
+  },
+  "models": [
+    {
+      "profile": "standard",
+      "model_id": "qwen3.8-flash",
+      "model_spec_source": "https://help.aliyun.com/zh/model-studio/qwen3-8-flash",
+      "documented_limits": {
+        "context_window": 1000000,
+        "max_input_tokens_non_thinking": 991808,
+        "max_output_tokens_non_thinking": 131072
+      },
+      "limits_evidence_kind": "official_documentation_not_full_length_live_probe",
+      "requested_max_output_tokens": 8192,
+      "request_parameters_accepted": true,
+      "configured_input_reservation_boundary": 32768,
+      "observed_input_tokens": 29,
+      "observed_output_tokens": 1,
+      "sampling": {
+        "temperature_configured": null,
+        "top_p_configured": null,
+        "temperature_sent": false,
+        "top_p_sent": false,
+        "temperature_documented_default": 0.7,
+        "top_p_documented_default": 0.8,
+        "temperature_effective_observed": null,
+        "top_p_effective_observed": null,
+        "source": "https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions"
+      },
+      "public_beijing_base_tariff_cny_per_million": {
+        "input": 0.8,
+        "output": 2.7
+      },
+      "public_beijing_promotion": null,
+      "price_source": "https://help.aliyun.com/zh/model-studio/model-pricing"
+    },
+    {
+      "profile": "strong",
+      "model_id": "qwen3.7-plus",
+      "model_spec_source": "https://help.aliyun.com/zh/model-studio/qwen3-7-plus",
+      "documented_limits": {
+        "context_window": 1000000,
+        "max_input_tokens_non_thinking": 991808,
+        "max_output_tokens_non_thinking": 131072
+      },
+      "limits_evidence_kind": "official_documentation_not_full_length_live_probe",
+      "requested_max_output_tokens": 8192,
+      "request_parameters_accepted": true,
+      "configured_input_reservation_boundary": 32768,
+      "observed_input_tokens": 29,
+      "observed_output_tokens": 1,
+      "sampling": {
+        "temperature_configured": null,
+        "top_p_configured": null,
+        "temperature_sent": false,
+        "top_p_sent": false,
+        "temperature_documented_default": 0.7,
+        "top_p_documented_default": 0.8,
+        "temperature_effective_observed": null,
+        "top_p_effective_observed": null,
+        "source": "https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions"
+      },
+      "public_beijing_base_tariff_cny_per_million": {
+        "input": 2.0,
+        "output": 8.0
+      },
+      "public_beijing_promotion": {
+        "discount_factor": 0.8,
+        "status": "documented_limited_time_offer_not_account_bill"
+      },
+      "price_source": "https://help.aliyun.com/zh/model-studio/model-pricing"
+    }
+  ],
+  "counts": {
+    "llm_calls": 2,
+    "provider_model_attempts": {
+      "bailian/qwen3.8-flash": 1,
+      "bailian/qwen3.7-plus": 1
+    },
+    "custom_run_post_attempts": 1,
+    "custom_runs": 1,
+    "formal_submissions": 0,
+    "algorithm_problem_tasks": 0,
+    "pilot_tasks": 0,
+    "main_experiment_tasks": 0,
+    "automatic_retries": 0,
+    "paid_requests_possible": 2,
+    "authenticated_gets_before_final_preflight": 7
+  },
+  "cost": {
+    "currency": "CNY",
+    "actual_billed_cost": null,
+    "status": "billing_unverified",
+    "configured_base_tariff_from_observed_usage": 9.19e-05,
+    "documented_promotion_tariff_from_observed_usage": 7.87e-05,
+    "cost_sources": [
+      "https://help.aliyun.com/zh/model-studio/model-pricing",
+      "https://help.aliyun.com/zh/model-studio/bill-query-and-cost-management"
+    ],
+    "warning": "Neither calculated amount is a verified account charge; zero cost is not assumed."
+  },
+  "feedback": {
+    "actual": "full",
+    "effective": "verdict_only",
+    "policy": "formal_verdict_only_v1",
+    "source": "GET /api/v1/me#feedback_mode",
+    "existing_submission_id": "103",
+    "formal_get_only": true,
+    "projected_submission": {
+      "submission_id": "103",
+      "status": "FINISHED",
+      "verdict": "AC"
+    },
+    "projected_feedback": {
+      "verdict": "AC"
+    }
+  },
+  "preserved": {
+    "protected_file_count": 470,
+    "changed_files": [],
+    "experiment_config_modified": false,
+    "model_replaced": false,
+    "checker_policy_relaxed": false,
+    "historical_workspace_rewritten": false
+  },
+  "artifacts": {
+    "provider-probe.json": "26d23810af5e1ef72427f395de4ae96573848072300be9e9563f1ef730282758",
+    "minioj-smoke.json": "62964d416c53bb6112e4f34091d3961274388ced7350aaa7fd5641ad2b620413",
+    "minioj-smoke-completed.json": "31d87e9baf5592d07cf1b14526512025116a7fae143b800a0c4a66d3e831bb8d",
+    "provider-probe.py": "710a4c9b78fe9fad6832cc183822ca25dc3c26dffcf9ef5961f4ca631da3522d",
+    "minioj-smoke-initial.py": "2f47f1438a4d9c4fff4a10d4a1b202fca2c261496dbe2d61e7a761a22679b1f3",
+    "minioj-smoke.py": "743cd2b94e400fb3f2d524a3bb0ef97ec16839323ffb57a17837633e34e220b5"
+  },
+  "initial_helper_abort": {
+    "preserved_evidence": "minioj-smoke.json",
+    "reason": "Incorrect feedback GET allowlist; intercepted before request dispatch; corrected helper followed current source.",
+    "custom_run_posts": 0,
+    "formal_submissions": 0,
+    "llm_calls": 0
+  }
+}

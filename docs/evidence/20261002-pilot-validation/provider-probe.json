@@ -1,0 +1,113 @@
+{
+  "schema_version": "pilot_provider_probe_v1",
+  "results": [
+    {
+      "profile": "standard",
+      "provider": "bailian",
+      "requested_model_id": "qwen3.8-flash",
+      "adapter_model_id": "qwen3.8-flash",
+      "status": "succeeded",
+      "response_content": "OK",
+      "content_matches_expected": true,
+      "finish_reason": "stop",
+      "request_id": "b8b565ec-64ae-9faf-9034-25a6e4d4f10c",
+      "usage": {
+        "input_tokens": 29,
+        "output_tokens": 1
+      },
+      "latency_ms": 687,
+      "error_kind": null,
+      "configured_tariff_cost_cny": 2.5900000000000003e-05,
+      "actual_billed_cost_cny": null,
+      "cost_status": "configured_tariff_estimate_only",
+      "generation_parameters_sent": {
+        "max_tokens": 8192,
+        "enable_thinking": false
+      },
+      "temperature_sent": false,
+      "top_p_sent": false,
+      "temperature_effective_observed": null,
+      "top_p_effective_observed": null,
+      "endpoint_fingerprint": "8b2745bf62ffc25c22839cae7ccd329991f2d07fcd4fd9e86858f97809f05c05",
+      "attempts": 1,
+      "observed_at": "2026-10-02T12:51:08.128795+00:00",
+      "git_sha": "08a035236fafbce81776f463a87702c12df1bcd2",
+      "runtime_source_hash": "fa79ce3f96444c6a877b178bdc7520113dfa07f8db13aee39c5da34edbce1271",
+      "model_config_file_hash": "e515fd243f542ff11471829147e7ffa62c21bef6d22b24090d6f300679d06316",
+      "script_sha256": "710a4c9b78fe9fad6832cc183822ca25dc3c26dffcf9ef5961f4ca631da3522d",
+      "http_status": 200,
+      "response_body_sha256": "2fd4e0e6ccfd608896b7a24e4f0f2760b1f1ecb04cb0241f4336e001c4b0dbc9",
+      "actual_model_id": "qwen3.8-flash",
+      "observed_usage_metadata": {
+        "completion_tokens": 1,
+        "prompt_tokens": 29,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "text_tokens": 29
+        },
+        "total_tokens": 30
+      },
+      "billing_fields_present": []
+    },
+    {
+      "profile": "strong",
+      "provider": "bailian",
+      "requested_model_id": "qwen3.7-plus",
+      "adapter_model_id": "qwen3.7-plus",
+      "status": "succeeded",
+      "response_content": "OK",
+      "content_matches_expected": true,
+      "finish_reason": "stop",
+      "request_id": "7b724cb0-40bd-92b3-926d-a7a2e9fd6f19",
+      "usage": {
+        "input_tokens": 29,
+        "output_tokens": 1
+      },
+      "latency_ms": 1011,
+      "error_kind": null,
+      "configured_tariff_cost_cny": 6.6e-05,
+      "actual_billed_cost_cny": null,
+      "cost_status": "configured_tariff_estimate_only",
+      "generation_parameters_sent": {
+        "max_tokens": 8192,
+        "enable_thinking": false
+      },
+      "temperature_sent": false,
+      "top_p_sent": false,
+      "temperature_effective_observed": null,
+      "top_p_effective_observed": null,
+      "endpoint_fingerprint": "8b2745bf62ffc25c22839cae7ccd329991f2d07fcd4fd9e86858f97809f05c05",
+      "attempts": 1,
+      "observed_at": "2026-10-02T12:51:09.146219+00:00",
+      "git_sha": "08a035236fafbce81776f463a87702c12df1bcd2",
+      "runtime_source_hash": "fa79ce3f96444c6a877b178bdc7520113dfa07f8db13aee39c5da34edbce1271",
+      "model_config_file_hash": "e515fd243f542ff11471829147e7ffa62c21bef6d22b24090d6f300679d06316",
+      "script_sha256": "710a4c9b78fe9fad6832cc183822ca25dc3c26dffcf9ef5961f4ca631da3522d",
+      "http_status": 200,
+      "response_body_sha256": "4ae99f8d760c0636332eeb80be24058b37e8d70eb079f42d3b10f35c9e4c649b",
+      "actual_model_id": "qwen3.7-plus",
+      "observed_usage_metadata": {
+        "total_tokens": 30,
+        "completion_tokens": 1,
+        "prompt_tokens": 29,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "text_tokens": 29
+        }
+      },
+      "billing_fields_present": []
+    }
+  ],
+  "calls_attempted": 2,
+  "configured_tariff_cost_cny": 9.19e-05,
+  "actual_billed_cost_cny": null,
+  "algorithm_tasks": 0,
+  "formal_submissions": 0,
+  "automatic_retries": 0,
+  "source": {
+    "git_sha": "08a035236fafbce81776f463a87702c12df1bcd2",
+    "runtime_source_hash": "fa79ce3f96444c6a877b178bdc7520113dfa07f8db13aee39c5da34edbce1271",
+    "model_config_file_hash": "e515fd243f542ff11471829147e7ffa62c21bef6d22b24090d6f300679d06316",
+    "script_sha256": "710a4c9b78fe9fad6832cc183822ca25dc3c26dffcf9ef5961f4ca631da3522d"
+  }
+}
