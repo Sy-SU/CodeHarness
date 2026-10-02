@@ -168,15 +168,41 @@ def test_sanitized_problem_rejects_known_information_leak_fields():
         make_client(handler).get_problem("sum")
 
 
-def test_submission_creation_requires_queued_without_verdict():
+def test_invalid_accepted_submission_response_is_result_unknown_without_retry():
+    calls = 0
+
     def handler(request):
+        nonlocal calls
+        calls += 1
         return httpx.Response(
             202,
             json={"submission_id": "sub_1", "status": "FINISHED", "verdict": "AC"},
         )
 
-    with pytest.raises(OJProtocolError, match="must return QUEUED"):
+    with pytest.raises(OJResultUnknownError, match="remote creation state is unknown") as raised:
         make_client(handler).submit_solution("sum", "int main(){}")
+    assert calls == 1
+    assert raised.value.http_status == 202
+    assert raised.value.submission_state_unknown
+    assert not raised.value.automatic_retry_allowed
+
+
+def test_submission_identifier_accepts_confirmed_integer_wire_form():
+    def handler(request):
+        if request.method == "POST":
+            return httpx.Response(202, json={"submission_id": 11, "status": "QUEUED"})
+        assert request.url.path == "/api/v1/submissions/11"
+        return httpx.Response(
+            200,
+            json={"submission_id": 11, "status": "FINISHED", "verdict": "AC"},
+        )
+
+    client = make_client(handler)
+    created = client.submit_solution("sum", "int main(){}")
+    assert created.submission_id == "11"
+    final = client.get_submission(created.submission_id)
+    assert final.submission_id == "11"
+    assert final.verdict == "AC"
 
 
 def test_feedback_rejects_unknown_verdict():

@@ -1,4 +1,7 @@
 .env
+.DS_Store
+/config/models.yaml
+/config/harness.yaml
 .venv/
 .uv-cache/
 __pycache__/

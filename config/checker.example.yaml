@@ -1,0 +1,10 @@
+# For new tasks only. Never silently apply to an old checkpoint.
+version: sample_check_v1
+on_unverifiable: stop
+# The generated checker executes on MiniOJ, is budgeted and is NOT verified.
+# A positive decision may authorize formal submission; rejection remains unknown.
+llm_checker: submit_on_pass
+overrides: {}
+# Explicit overrides are keyed by problem ID, never inferred from tags/text.
+# Float checking requires both absolute_tolerance and relative_tolerance.
+# No default float tolerance is supplied here.

@@ -1,0 +1,448 @@
+{
+  "scope": "read_only_metadata_verification; final fingerprint is in workspace preflight reports",
+  "verified_at": "2026-10-02T12:03:43.125944+00:00",
+  "checker_distribution": {
+    "exact": 0,
+    "token": 4,
+    "float": 0,
+    "special": 5,
+    "unknown": 3,
+    "llm_generated_unverified": 0
+  },
+  "expected_checker_distribution": {
+    "exact": 0,
+    "token": 4,
+    "float": 0,
+    "special": 0,
+    "unknown": 0,
+    "llm_generated_unverified": 8
+  },
+  "checker_strata": {
+    "fully_client_verifiable": 4,
+    "remote_verifiable": 0,
+    "llm_checker_required": 8,
+    "unverifiable": 0
+  },
+  "problems": [
+    {
+      "problem_id": "CF2119B",
+      "rating": 1200,
+      "observed_rating": 1200,
+      "checker_type": "unknown",
+      "checker_source": "GET /api/v1/problems/CF2119B#checker",
+      "requires_llm_generated_checker": true,
+      "sample_count": 1,
+      "problem_input_hash": "c440d68f5e1c24e7a8025ade52e8a5d6d4d399b79148879f830db1b6ecbac615"
+    },
+    {
+      "problem_id": "CF2118B",
+      "rating": 1200,
+      "observed_rating": 1200,
+      "checker_type": "special",
+      "checker_source": "GET /api/v1/problems/CF2118B#checker",
+      "requires_llm_generated_checker": true,
+      "sample_count": 1,
+      "problem_input_hash": "1bfbcca853e80f544c340b7a0e58b2d4d955400f755727b5ce37410e5aa411f8"
+    },
+    {
+      "problem_id": "CF2113B",
+      "rating": 1200,
+      "observed_rating": 1200,
+      "checker_type": "unknown",
+      "checker_source": "GET /api/v1/problems/CF2113B#checker",
+      "requires_llm_generated_checker": true,
+      "sample_count": 1,
+      "problem_input_hash": "6202abec0dfb03993bc2f163217f4ad4d442f75952227802edaf211d26f07f89"
+    },
+    {
+      "problem_id": "CF2127C",
+      "rating": 1400,
+      "observed_rating": 1400,
+      "checker_type": "token",
+      "checker_source": "GET /api/v1/problems/CF2127C#checker",
+      "requires_llm_generated_checker": false,
+      "sample_count": 1,
+      "problem_input_hash": "a279c590f78976a803c7bb153a43c2b9ca6b1aeb855d2b81884cb17bd4c2c453"
+    },
+    {
+      "problem_id": "CF2111D",
+      "rating": 1400,
+      "observed_rating": 1400,
+      "checker_type": "special",
+      "checker_source": "GET /api/v1/problems/CF2111D#checker",
+      "requires_llm_generated_checker": true,
+      "sample_count": 1,
+      "problem_input_hash": "e65a4b6685dd1ef923420eccaed27dd0d92c0d554f459dde00288da1c6b6c214"
+    },
+    {
+      "problem_id": "CF2110C",
+      "rating": 1400,
+      "observed_rating": 1400,
+      "checker_type": "special",
+      "checker_source": "GET /api/v1/problems/CF2110C#checker",
+      "requires_llm_generated_checker": true,
+      "sample_count": 1,
+      "problem_input_hash": "ac0edac19460e7a48f2dd5ed7c9323850730b2e9aea3d5935e7c0be88f4bde75"
+    },
+    {
+      "problem_id": "CF2125D",
+      "rating": 1600,
+      "observed_rating": 1600,
+      "checker_type": "token",
+      "checker_source": "GET /api/v1/problems/CF2125D#checker",
+      "requires_llm_generated_checker": false,
+      "sample_count": 3,
+      "problem_input_hash": "e37386a0ba1f415bf31004d12e13cc4bfc6cda26eeda63e2ae1167dd524d2c4d"
+    },
+    {
+      "problem_id": "CF2103C",
+      "rating": 1600,
+      "observed_rating": 1600,
+      "checker_type": "unknown",
+      "checker_source": "GET /api/v1/problems/CF2103C#checker",
+      "requires_llm_generated_checker": true,
+      "sample_count": 1,
+      "problem_input_hash": "93f39cb2f6ac63c099707a410f88674b9bb5f2e4ca738b09906b6690a7ba6aac"
+    },
+    {
+      "problem_id": "CF2084D",
+      "rating": 1600,
+      "observed_rating": 1600,
+      "checker_type": "special",
+      "checker_source": "GET /api/v1/problems/CF2084D#checker",
+      "requires_llm_generated_checker": true,
+      "sample_count": 1,
+      "problem_input_hash": "6aabc6642b97be02915586f2c94b0165a107a349dfad282f289f7d18f0a1a46e"
+    },
+    {
+      "problem_id": "CF2127D",
+      "rating": 1800,
+      "observed_rating": 1800,
+      "checker_type": "token",
+      "checker_source": "GET /api/v1/problems/CF2127D#checker",
+      "requires_llm_generated_checker": false,
+      "sample_count": 1,
+      "problem_input_hash": "9d0cc22aeae44a61e857f27b840ad477743a70a376b17851e5ceed0a6bf41b99"
+    },
+    {
+      "problem_id": "CF2120D",
+      "rating": 1800,
+      "observed_rating": 1800,
+      "checker_type": "token",
+      "checker_source": "GET /api/v1/problems/CF2120D#checker",
+      "requires_llm_generated_checker": false,
+      "sample_count": 1,
+      "problem_input_hash": "62ddeaef736ee77734ee16f420a963beafa4af9fca00796c1e85f80e03907de3"
+    },
+    {
+      "problem_id": "CF2092D",
+      "rating": 1800,
+      "observed_rating": 1800,
+      "checker_type": "special",
+      "checker_source": "GET /api/v1/problems/CF2092D#checker",
+      "requires_llm_generated_checker": true,
+      "sample_count": 1,
+      "problem_input_hash": "2ab8ed97016abe70cebea810d79f620c52ed653ec0a474f3b6924edfd6b7934b"
+    }
+  ],
+  "models": [
+    {
+      "profile": "standard",
+      "provider": "bailian",
+      "model_id": "qwen3.8-flash",
+      "endpoint_fingerprint": "8b2745bf62ffc25c22839cae7ccd329991f2d07fcd4fd9e86858f97809f05c05",
+      "configured": {
+        "max_output_tokens": 8192,
+        "input_reservation_boundary": 32768,
+        "input_price": 0.8,
+        "output_price": 2.7,
+        "currency": "CNY",
+        "price_unit": "per_million_tokens",
+        "temperature": null,
+        "top_p": null,
+        "generation_parameters": {
+          "max_tokens": 8192,
+          "enable_thinking": false
+        },
+        "provider_timeout_seconds": 120.0
+      },
+      "verified": {
+        "model_available": true,
+        "max_output_tokens": null,
+        "context_window": null,
+        "input_limit": null,
+        "input_price": null,
+        "output_price": null,
+        "currency": null,
+        "verification_source": "GET /models#data[].id",
+        "verified_at": "2026-10-02T12:03:43.125944+00:00",
+        "field_sources": {
+          "model_available": "GET /models#data[].id"
+        }
+      },
+      "needs_live_probe": true
+    },
+    {
+      "profile": "strong",
+      "provider": "bailian",
+      "model_id": "qwen3.7-plus",
+      "endpoint_fingerprint": "8b2745bf62ffc25c22839cae7ccd329991f2d07fcd4fd9e86858f97809f05c05",
+      "configured": {
+        "max_output_tokens": 8192,
+        "input_reservation_boundary": 32768,
+        "input_price": 2.0,
+        "output_price": 8.0,
+        "currency": "CNY",
+        "price_unit": "per_million_tokens",
+        "temperature": null,
+        "top_p": null,
+        "generation_parameters": {
+          "max_tokens": 8192,
+          "enable_thinking": false
+        },
+        "provider_timeout_seconds": 120.0
+      },
+      "verified": {
+        "model_available": true,
+        "max_output_tokens": null,
+        "context_window": null,
+        "input_limit": null,
+        "input_price": null,
+        "output_price": null,
+        "currency": null,
+        "verification_source": "GET /models#data[].id",
+        "verified_at": "2026-10-02T12:03:43.125944+00:00",
+        "field_sources": {
+          "model_available": "GET /models#data[].id"
+        }
+      },
+      "needs_live_probe": true
+    }
+  ],
+  "feedback": {
+    "expected_feedback_mode": "verdict_only",
+    "actual_feedback_mode": "full",
+    "effective_feedback_mode": "verdict_only",
+    "feedback_policy": "formal_verdict_only_v1",
+    "feedback_source": "GET /api/v1/me#feedback_mode",
+    "feedback_preflight_status": "READY"
+  },
+  "side_effects": {
+    "llm_calls": 0,
+    "custom_runs": 0,
+    "formal_submissions": 0,
+    "paid_requests": 0,
+    "paid_cost_cny": 0,
+    "read_only_http_gets": [
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/me",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2119B",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2119B",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2118B",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2118B",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2113B",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2113B",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2127C",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2127C",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2111D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2111D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2110C",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2110C",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2125D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2125D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2103C",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2103C",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2084D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2084D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2127D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2127D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2120D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2120D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/problems/CF2092D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "MiniOJ",
+        "path": "/api/v1/agent/problems/CF2092D",
+        "endpoint_fingerprint": "3df34284ee46e8ef9e3407cb30450e794619bc5527a9009b9e466716a7e4dded",
+        "http_status": 200,
+        "status": "received"
+      },
+      {
+        "method": "GET",
+        "service": "provider",
+        "path": "/models",
+        "endpoint_fingerprint": "8b2745bf62ffc25c22839cae7ccd329991f2d07fcd4fd9e86858f97809f05c05",
+        "http_status": 200,
+        "status": "received"
+      }
+    ]
+  },
+  "successful_GET_count": 26
+}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional
 
 from agent.models.types import AgentRole, ChatMessage
@@ -34,19 +35,23 @@ class ContextBuilder:
             f"Input:\n{problem.get('input_specification', '')}",
             f"Output:\n{problem.get('output_specification', '')}",
             f"Limits: {limits.get('time_ms', 0)} ms, {limits.get('memory_mb', 0)} MB",
+            f"Notes:\n{problem.get('notes', '')}",
         ]
         samples = problem.get("samples") or []
-        for index, sample in enumerate(samples[:3], 1):
+        for index, sample in enumerate(samples, 1):
             sections.append(
                 f"Sample {index} input:\n{sample.get('input', '')}\n"
                 f"Sample {index} output:\n{sample.get('output', '')}"
             )
         if plan:
-            sections.append(f"Current plan:\n{plan[-8000:]}")
+            sections.append(f"Current plan:\n{plan}")
         if current_solution:
-            sections.append(f"Current C++20 solution:\n{current_solution[-20000:]}")
+            sections.append(f"Current C++20 solution:\n{current_solution}")
         if feedback:
-            sections.append(f"Latest structured judge feedback:\n{feedback}")
+            rendered = json.dumps(feedback, ensure_ascii=False, default=str)
+            if len(rendered) > 8000:
+                rendered = rendered[:8000] + "\n[feedback clipped; full artifact retained]"
+            sections.append(f"Latest structured judge feedback:\n{rendered}")
         if recent_history:
             sections.append("Recent events:\n" + "\n".join(recent_history[-5:]))
         instructions = {

@@ -1,0 +1,9 @@
+# Default task budget: 1 CNY, configurable with --max-cost-cny or Dashboard.
+# The formal submission limit cannot be raised above 10 per independent task.
+max_submissions: 10
+max_cost_cny: 1.0
+debug_before_replan: 3
+# Finite backstop when only public samples fail, or a route has zero pricing.
+max_llm_calls: 80
+# Optional cumulative active-runtime limit, persisted across resume.
+max_wall_clock_seconds: null

@@ -1,0 +1,149 @@
+# Preparation only: 12 x 5 = 60 tasks. No execution is authorized by this file.
+# Public MiniOJ ratings fetched 2026-10-02; no metadata is added to model prompts.
+# 60 CNY is an allocation ceiling, not expected spend. Supplier verification remains null.
+schema_version: phase5-v1
+name: small-five-conditions-12-problems
+model_config: models.yaml
+problems:
+- CF2119B
+- CF2118B
+- CF2113B
+- CF2127C
+- CF2111D
+- CF2110C
+- CF2125D
+- CF2103C
+- CF2084D
+- CF2127D
+- CF2120D
+- CF2092D
+repetitions: 1
+total_cost_cny: 60.0
+strategies:
+- name: standard-code-only
+  mode: code-only
+  profile: standard
+- name: strong-code-only
+  mode: code-only
+  profile: strong
+- name: standard-harness
+  mode: harness-loop
+  profile: standard
+- name: strong-harness
+  mode: harness-loop
+  profile: strong
+- name: mixed-harness
+  mode: harness-loop
+  roles:
+    PLAN: strong
+    CODE: standard
+    DEBUG: standard
+harness:
+  max_submissions: 10
+  max_cost_cny: 1.0
+  debug_before_replan: 3
+  max_llm_calls: 80
+  max_wall_clock_seconds: null
+http_timeout: 15
+poll_interval: 1
+deadline: 120
+expected_feedback_mode: verdict_only
+require_feedback_mode: true
+problem_metadata:
+  CF2119B:
+    rating: 1200
+    rating_source: GET /api/v1/problems/CF2119B#rating
+    fetched_at: '2026-10-02T07:18:32.061450+00:00'
+  CF2118B:
+    rating: 1200
+    rating_source: GET /api/v1/problems/CF2118B#rating
+    fetched_at: '2026-10-02T07:18:32.083281+00:00'
+  CF2113B:
+    rating: 1200
+    rating_source: GET /api/v1/problems/CF2113B#rating
+    fetched_at: '2026-10-02T07:18:32.100865+00:00'
+  CF2127C:
+    rating: 1400
+    rating_source: GET /api/v1/problems/CF2127C#rating
+    fetched_at: '2026-10-02T07:18:32.119369+00:00'
+  CF2111D:
+    rating: 1400
+    rating_source: GET /api/v1/problems/CF2111D#rating
+    fetched_at: '2026-10-02T07:18:32.138590+00:00'
+  CF2110C:
+    rating: 1400
+    rating_source: GET /api/v1/problems/CF2110C#rating
+    fetched_at: '2026-10-02T07:18:32.156564+00:00'
+  CF2125D:
+    rating: 1600
+    rating_source: GET /api/v1/problems/CF2125D#rating
+    fetched_at: '2026-10-02T07:18:32.171849+00:00'
+  CF2103C:
+    rating: 1600
+    rating_source: GET /api/v1/problems/CF2103C#rating
+    fetched_at: '2026-10-02T07:18:32.190293+00:00'
+  CF2084D:
+    rating: 1600
+    rating_source: GET /api/v1/problems/CF2084D#rating
+    fetched_at: '2026-10-02T07:18:32.206349+00:00'
+  CF2127D:
+    rating: 1800
+    rating_source: GET /api/v1/problems/CF2127D#rating
+    fetched_at: '2026-10-02T07:18:32.223653+00:00'
+  CF2120D:
+    rating: 1800
+    rating_source: GET /api/v1/problems/CF2120D#rating
+    fetched_at: '2026-10-02T07:18:32.242400+00:00'
+  CF2092D:
+    rating: 1800
+    rating_source: GET /api/v1/problems/CF2092D#rating
+    fetched_at: '2026-10-02T07:18:32.258470+00:00'
+sample_checking:
+  version: sample_check_v1
+  on_unverifiable: stop
+  llm_checker: submit_on_pass
+  overrides:
+    CF2119B:
+      kind: unknown
+      source: GET /api/v1/problems/CF2119B#checker
+    CF2118B:
+      kind: special
+      source: GET /api/v1/problems/CF2118B#checker
+    CF2113B:
+      kind: unknown
+      source: GET /api/v1/problems/CF2113B#checker
+    CF2127C:
+      kind: token
+      source: GET /api/v1/problems/CF2127C#checker
+    CF2111D:
+      kind: special
+      source: GET /api/v1/problems/CF2111D#checker
+    CF2110C:
+      kind: special
+      source: GET /api/v1/problems/CF2110C#checker
+    CF2125D:
+      kind: token
+      source: GET /api/v1/problems/CF2125D#checker
+    CF2103C:
+      kind: unknown
+      source: GET /api/v1/problems/CF2103C#checker
+    CF2084D:
+      kind: special
+      source: GET /api/v1/problems/CF2084D#checker
+    CF2127D:
+      kind: token
+      source: GET /api/v1/problems/CF2127D#checker
+    CF2120D:
+      kind: token
+      source: GET /api/v1/problems/CF2120D#checker
+    CF2092D:
+      kind: special
+      source: GET /api/v1/problems/CF2092D#checker
+preparation:
+  problem_count: 12
+  rating_counts:
+    '1200': 3
+    '1400': 3
+    '1600': 3
+    '1800': 3
+  five_conditions: true

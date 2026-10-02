@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Type
 
 from agent.oj_client.client import OJClient, OJClientError
+from agent.oj_client.feedback import FORMAL_TOOLS, VERDICT_ONLY_POLICY, restrict_formal_result, restricted_error
 from agent.workspace.task import TaskWorkspace
 
 
@@ -160,10 +161,16 @@ class ToolRuntime:
             {"tool": name, "arguments": _safe_arguments(arguments)},
             correlation_id=call_id,
         )
+        restricted = (name in FORMAL_TOOLS
+            and self.workspace.state.feedback_policy == VERDICT_ONLY_POLICY)
         try:
             self.specs[name].validate(arguments)
             result = self.handlers[name](**arguments)
+            if restricted:
+                result = restrict_formal_result(name, result)
         except Exception as exc:
+            if restricted:
+                exc = restricted_error(exc)
             error_payload: Dict[str, Any] = {
                 "tool": name,
                 "ok": False,
@@ -184,6 +191,8 @@ class ToolRuntime:
                 error_payload,
                 correlation_id=call_id,
             )
+            if restricted:
+                raise exc from None
             raise
         self.workspace.trace.append(
             "TOOL_RESULT",
@@ -234,6 +243,10 @@ def build_default_tools(client: OJClient, workspace: TaskWorkspace) -> ToolRunti
             _parameter("stdin", str),
         ),
     )
+    if hasattr(client, "get_checker_metadata"):
+        runtime.register("get_checker_metadata", client.get_checker_metadata,
+            spec=_spec("get_checker_metadata", "Read only public checker metadata, excluding other content.",
+                       _parameter("problem_id", str, allow_empty=False)))
     runtime.register(
         "submit_solution",
         client.submit_solution,

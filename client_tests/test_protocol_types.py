@@ -69,9 +69,16 @@ def test_draft_feedback_and_error_details_remain_opaque(protocol_fixture):
     assert error.details == {"request_id": "req_example"}
 
 
-def test_invalid_protocol_shape_fails_instead_of_coercing_values():
-    with pytest.raises(ProtocolValidationError):
-        SubmissionRecord.from_dict({"submission_id": 123, "status": "QUEUED"})
+def test_confirmed_integer_submission_id_is_normalized_but_invalid_values_fail():
+    assert (
+        SubmissionRecord.from_dict({"submission_id": 123, "status": "QUEUED"}).submission_id
+        == "123"
+    )
+    for invalid in (True, -1, 1.5, ""):
+        with pytest.raises(ProtocolValidationError):
+            SubmissionRecord.from_dict(
+                {"submission_id": invalid, "status": "QUEUED"}
+            )
 
 
 def test_model_state_and_event_types_are_client_owned():

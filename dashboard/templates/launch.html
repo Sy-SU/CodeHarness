@@ -1,0 +1,33 @@
+{% extends "base.html" %}{% from "macros.html" import card, compact_task_table with context %}
+{% block title %}{{ t('Run a contest' if contest_mode else 'Run a problem') }}{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>{{ t('Run a contest' if contest_mode else 'Run a problem') }}</h1><p class="subtitle">{{ t('Enter a contest ID. Run its public problems sequentially with the configured model.' if contest_mode else 'Choose a problem and mode. Follow the saved progress and judge result here.') }}</p></div></div>
+<section class="panel"><form id="launch-form" class="launch-form" data-target="{{ 'contest' if contest_mode else 'problem' }}">
+  {% if contest_mode %}
+  <label>{{ t('Contest ID') }}<input name="contest_id" placeholder="1" maxlength="19" pattern="[0-9]+" required autocomplete="off"></label>
+  <label>{{ t('Whole contest budget (CNY)') }}<input name="total_cost_cny" type="number" min="0.000001" step="any" value="1" required></label>
+  {% else %}<label>{{ t('Problem ID') }}<input name="problem_id" placeholder="T1003" maxlength="160" required autocomplete="off"></label>{% endif %}
+  <label>{{ t('Mode') }}<select name="mode"><option value="harness-loop">harness-loop</option><option value="code-only">code-only</option></select></label>
+  <label>{{ t('Model strategy') }}<select name="profile"><option value="">{{ t('Mixed roles (PLAN strong / CODE standard)') }}</option>{% for profile in ['standard', 'strong', 'fast', 'max'] %}<option value="{{ profile }}">{{ t('Fixed') }} · {{ profile }}</option>{% endfor %}</select></label>
+  <details id="task-config" class="task-config">
+    <summary>{{ t('Task configuration') }}<span id="config-summary" class="muted" aria-live="polite">{{ t('{cost} CNY · {calls} model calls · {submissions} submissions', cost=default_config.max_cost_cny, calls=default_config.max_llm_calls, submissions=default_config.max_submissions) }}</span></summary>
+    <div class="config-fields">
+      <label>{{ t('Task budget (CNY)') }}<input name="max_cost_cny" type="number" min="0.000001" step="any" value="{{ default_config.max_cost_cny }}" required></label>
+      <label>{{ t('Maximum model calls') }}<input name="max_llm_calls" type="number" min="1" step="1" value="{{ default_config.max_llm_calls }}" required></label>
+      <label>{{ t('Maximum submission attempts') }}<input name="max_submissions" type="number" min="1" max="10" step="1" value="{{ default_config.max_submissions }}" required></label>
+      <label>{{ t('MiniOJ HTTP timeout (s)') }}<input name="http_timeout" type="number" min="0.000001" step="any" value="{{ default_config.http_timeout }}" required></label>
+      <label>{{ t('Judge polling interval (s)') }}<input name="poll_interval" type="number" min="0" step="any" value="{{ default_config.poll_interval }}" required></label>
+      <label>{{ t('Judge wait deadline (s)') }}<input name="deadline" type="number" min="0" step="any" value="{{ default_config.deadline }}" required></label>
+    </div>
+    <div class="config-footer"><p>{{ t('Applies only to this new task. Saved tasks, model configuration and API credentials are unchanged.') }}<br>{{ t('Model calls include PLAN, CODE, DEBUG and generated sample checkers; public runs do not count as submissions.') }}</p><button type="button" class="button small" id="reset-task-config">{{ t('Reset task defaults') }}</button></div>
+  </details>
+  {% if contest_mode %}<p class="launch-note">{{ t('Task settings apply per problem; the whole contest cap also applies. Budget-skipped and unknown results are not AC. No official points or penalties are calculated.') }}<br>{{ t('Only public contest problems are read. Submissions use the contest endpoint; blocked visibility is not bypassed.') }}</p>{% endif %}
+  <p class="launch-note"><span id="mode-note">{{ t('Public samples first · 3 failed DEBUG candidates replan · no model escalation') }}</span><br>{{ t('At most 10 formal submissions · resume keeps all saved task settings') }}<br>{{ t('Special or unknown samples may use an unverified model-generated checker. Rejection stops without DEBUG; approval may allow formal submission.') }}<br>{{ t('Expected Agent feedback mode') }}: {{ launch_settings.expected_feedback_mode }} · {{ t('Unknown or mismatched mode stops before model calls') }}{% if launch_settings.expected_feedback_mode == 'verdict_only' %}<br>{{ t('Full server feedback is accepted and reduced to verdict-only; hidden testcase details are withheld.') }}{% endif %}</p>
+  <label class="launch-confirm"><input name="confirm" type="checkbox" required>{{ t('I confirm this task may call the configured model API and submit to MiniOJ within its budget.') }}</label>
+  <div class="launch-actions"><button class="button primary" type="submit">{{ t('Start contest test' if contest_mode else 'Start task') }}</button><a href="/models">{{ t('Model configuration') }}</a></div>
+  <p id="launch-message" role="status" class="launch-note" hidden></p>
+</form></section>
+{% if contest_mode %}{% include 'contests_list.html' %}{% endif %}
+<div class="metrics simple-metrics">{{ card('Total Tasks', metrics.total_tasks) }}{{ card('Solved', metrics.solved) }}{{ card('LLM Calls', metrics.llm_calls) }}</div>
+<section class="panel"><div class="panel-heading"><h2>{{ t('Recent tasks') }}</h2><a href="/tasks">{{ t('View all →') }}</a></div>{{ compact_task_table(recent) }}</section>
+{% endblock %}

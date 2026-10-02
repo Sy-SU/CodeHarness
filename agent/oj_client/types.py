@@ -66,6 +66,17 @@ def _required_string(value: Mapping[str, Any], key: str) -> str:
     return result
 
 
+def _required_identifier(value: Mapping[str, Any], key: str) -> str:
+    """Normalize confirmed string/integer resource IDs to the internal string form."""
+
+    result = value.get(key)
+    if isinstance(result, str) and result:
+        return result
+    if isinstance(result, int) and not isinstance(result, bool) and result >= 0:
+        return str(result)
+    raise ProtocolValidationError(f"{key} must be a non-empty string or non-negative integer")
+
+
 def _optional_string(value: Mapping[str, Any], key: str) -> Optional[str]:
     result = value.get(key)
     if result is None:
@@ -227,7 +238,7 @@ class SubmissionRecord:
     def from_dict(cls, raw: Mapping[str, Any]) -> "SubmissionRecord":
         value = _object(raw, "submission")
         return cls(
-            submission_id=_required_string(value, "submission_id"),
+            submission_id=_required_identifier(value, "submission_id"),
             status=_required_string(value, "status"),
             verdict=_optional_string(value, "verdict"),
             extra_fields=_extras(value, {"submission_id", "status", "verdict"}),

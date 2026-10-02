@@ -1,0 +1,30 @@
+# Confirmed T1003, five strategies, one repetition each. Run only explicitly.
+# Historical filename retained; server metadata must declare verdict_only or full.
+# Full is projected to verdict_only by the versioned client feedback policy.
+# Expectation is not proof of actual mode, and never grants hidden-test access.
+schema_version: phase5-v1
+name: T1003-verdict-only-five-strategies
+model_config: models.yaml
+problems: [T1003]
+repetitions: 1
+# Allocation cap, not expected spend or permission to run automatically.
+total_cost_cny: 5.0
+strategies:
+  - {name: standard-code-only, mode: code-only, profile: standard}
+  - {name: strong-code-only, mode: code-only, profile: strong}
+  - {name: standard-harness, mode: harness-loop, profile: standard}
+  - {name: strong-harness, mode: harness-loop, profile: strong}
+  - name: mixed-harness
+    mode: harness-loop
+    roles: {PLAN: strong, CODE: standard, DEBUG: standard}
+harness:
+  max_submissions: 10
+  max_cost_cny: 1.0
+  debug_before_replan: 3
+  max_llm_calls: 80
+  max_wall_clock_seconds: null
+http_timeout: 15
+poll_interval: 1
+deadline: 120
+expected_feedback_mode: verdict_only
+require_feedback_mode: true

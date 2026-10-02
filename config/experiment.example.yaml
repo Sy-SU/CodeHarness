@@ -1,0 +1,30 @@
+# Four fixed-Profile targets plus one explicitly named mixed strategy. Not a live run.
+schema_version: phase5-v1
+name: five-strategies
+model_config: models.yaml
+problems: [REPLACE_WITH_PROBLEM_ID]
+repetitions: 1
+# Each independent task defaults to 1 CNY / 10 POSTs; the batch also has a cap.
+# Five strategies x one problem x one repetition = at most 5 CNY of allocations.
+total_cost_cny: 5.0
+strategies:
+  - {name: standard-code-only, mode: code-only, profile: standard}
+  - {name: strong-code-only, mode: code-only, profile: strong}
+  - {name: standard-harness, mode: harness-loop, profile: standard}
+  - {name: strong-harness, mode: harness-loop, profile: strong}
+  - name: mixed-harness
+    mode: harness-loop
+    roles: {PLAN: strong, CODE: standard, DEBUG: standard}
+harness:
+  max_submissions: 10
+  max_cost_cny: 1.0
+  debug_before_replan: 3
+  max_llm_calls: 80
+  max_wall_clock_seconds: null
+http_timeout: 15
+poll_interval: 1
+deadline: 120
+# Do not substitute the requested mode for the observed server condition.
+# Explicit full metadata is compatible via the client's verdict-only projection.
+expected_feedback_mode: verdict_only
+require_feedback_mode: true

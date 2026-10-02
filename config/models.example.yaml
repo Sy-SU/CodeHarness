@@ -1,21 +1,41 @@
-# Placeholders only. Phase 0 does not select provider endpoints, model IDs,
-# supported parameters, or prices.
+# Structural example only. Replace every MODEL_NAME_* placeholder locally.
+# Prices are intentionally absent: missing pricing is represented as unknown,
+# never as zero/free. Add both per-million prices plus currency only when known.
+# Harness also requires a verified input_token_limit and currency: CNY for each
+# used route. max_tokens below is an editable example, not a confirmed model limit.
 providers:
   bailian:
     type: openai-compatible
     base_url_env: BAILIAN_BASE_URL
     api_key_env: BAILIAN_API_KEY
+    timeout_seconds: 120
+    supported_parameters: [max_tokens]
 
 models:
   fast:
     provider: bailian
     model: MODEL_NAME_FAST
+    parameters: {max_tokens: 8192}
   standard:
     provider: bailian
     model: MODEL_NAME_STANDARD
+    parameters: {max_tokens: 8192}
   strong:
     provider: bailian
     model: MODEL_NAME_STRONG
+    parameters: {max_tokens: 8192}
   max:
     provider: bailian
     model: MODEL_NAME_MAX
+    parameters: {max_tokens: 8192}
+
+policy:
+  roles:
+    PLAN: strong
+    CODE: standard
+    TEST_GENERATION: strong
+    DEBUG: standard
+    REVIEW: strong
+  # Phase 4 currently keeps escalation disabled; replanning preserves base roles.
+  debug_escalation:
+    enabled: false

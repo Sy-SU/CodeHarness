@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('Contest tests') }} · {{ report.contest_id }}{% endblock %}
+{% block content %}
+<div id="contest-detail" data-run-id="{{ report.run_id }}" data-status="{{ report.status }}">
+<div class="page-heading"><div><h1>{{ t('Contest ID') }} {{ report.contest_id }} · <span data-contest="title">{{ report.title|display }}</span></h1><p class="subtitle mono">{{ report.run_id }}</p></div>{% if launch_enabled %}<button id="resume-contest" class="button" data-run-id="{{ report.run_id }}" {% if not report.resumable %}hidden{% endif %}>{{ t('Resume contest test') }}</button>{% endif %}</div>
+<section class="panel contest-summary"><dl class="contest-fields">
+<div><dt>{{ t('Task status') }}</dt><dd data-contest="status">{{ t(report.status) }}</dd></div>
+<div><dt>{{ t('Accepted / total') }}</dt><dd><span data-contest="accepted">{{ report.accepted }}</span> / <span data-contest="total_problems">{{ report.total_problems|display }}</span></dd></div>
+<div><dt>{{ t('Official Performance') }}</dt><dd data-contest="official_performance">{{ report.official_performance|display }}</dd><small data-contest="official_performance_status">{{ t(report.official_performance_status) }}</small></div>
+<div><dt>{{ t('Performance fetched (UTC)') }}</dt><dd data-contest="official_performance_fetched_at">{{ report.official_performance_fetched_at|display }}</dd></div>
+<div><dt>{{ t('LLM calls') }}</dt><dd data-contest="llm_calls">{{ report.llm_calls }}</dd></div>
+<div><dt>{{ t('Submissions') }}</dt><dd data-contest="submission_attempts">{{ report.submission_attempts }}</dd></div>
+<div><dt>{{ t('Estimated cost (CNY)') }}</dt><dd data-contest="estimated_cost_cny">{{ report.estimated_cost_cny|display }}</dd></div>
+<div><dt>{{ t('Whole contest budget (CNY)') }}</dt><dd>{{ report.total_cost_limit_cny }}</dd></div>
+</dl><p id="contest-reason" class="launch-note">{{ t(report.reason or '') }}</p><p class="launch-note">{{ t('AC counts only; official points, penalties and rankings are not calculated. Cost is a configured estimate, not a provider bill.') }}</p><p id="contest-message" role="status"></p></section>
+<section class="panel"><div class="panel-heading"><h2>{{ t('Problems') }}</h2></div><div class="table-wrap"><table><thead><tr><th>{{ t('Problem ID') }}</th><th>{{ t('Task status') }}</th><th>{{ t('Verdict') }}</th><th>{{ t('LLM calls') }}</th><th>{{ t('Submissions') }}</th></tr></thead><tbody id="contest-problems">
+{% for problem in report.problems %}<tr><td>{{ problem.label }} · {% if problem.task_id %}<a href="/tasks/{{ problem.task_id }}">{{ problem.problem_id }}</a>{% else %}{{ problem.problem_id }}{% endif %}<small>{{ problem.title }}</small></td><td>{{ t(problem.terminal_status or problem.status or 'pending') }}<small>{{ t(problem.termination_reason or '') }}</small></td><td>{{ problem.final_verdict|display }}</td><td>{{ problem.llm_calls|display }}</td><td>{{ problem.submission_attempts|display }}</td></tr>{% else %}<tr><td colspan="5" class="empty">{{ t('No public problems loaded.') }}</td></tr>{% endfor %}
+</tbody></table></div></section>
+<section class="panel"><p>{{ t('Official Performance is cumulative for the contest account, including other runs. It is not a per-task score.') }}</p>{% if launch_enabled %}<button id="refresh-performance" class="button" type="button">{{ t('Refresh official Performance (GET only)') }}</button>{% endif %}<p data-contest="official_performance_source">{{ report.official_performance_source|display }}</p></section></div>
+{% endblock %}

@@ -1,0 +1,75 @@
+# Preparation only: 3 x 5 = 15 tasks. Not execution authorization.
+# Token checkers and public ratings selected from the unchanged 12-problem set.
+schema_version: phase5-v1
+name: pilot-five-conditions-3-problems
+model_config: models.yaml
+problems:
+- CF2127C
+- CF2125D
+- CF2127D
+repetitions: 1
+total_cost_cny: 15.0
+strategies:
+- name: standard-code-only
+  mode: code-only
+  profile: standard
+- name: strong-code-only
+  mode: code-only
+  profile: strong
+- name: standard-harness
+  mode: harness-loop
+  profile: standard
+- name: strong-harness
+  mode: harness-loop
+  profile: strong
+- name: mixed-harness
+  mode: harness-loop
+  roles:
+    PLAN: strong
+    CODE: standard
+    DEBUG: standard
+harness:
+  max_submissions: 10
+  max_cost_cny: 1.0
+  debug_before_replan: 3
+  max_llm_calls: 80
+  max_wall_clock_seconds: null
+http_timeout: 15
+poll_interval: 1
+deadline: 120
+expected_feedback_mode: verdict_only
+require_feedback_mode: true
+problem_metadata:
+  CF2127C:
+    rating: 1400
+    rating_source: GET /api/v1/problems/CF2127C#rating
+    fetched_at: '2026-10-02T07:18:32.119369+00:00'
+  CF2125D:
+    rating: 1600
+    rating_source: GET /api/v1/problems/CF2125D#rating
+    fetched_at: '2026-10-02T07:18:32.171849+00:00'
+  CF2127D:
+    rating: 1800
+    rating_source: GET /api/v1/problems/CF2127D#rating
+    fetched_at: '2026-10-02T07:18:32.223653+00:00'
+sample_checking:
+  version: sample_check_v1
+  on_unverifiable: stop
+  llm_checker: submit_on_pass
+  overrides:
+    CF2127C:
+      kind: token
+      source: GET /api/v1/problems/CF2127C#checker
+    CF2125D:
+      kind: token
+      source: GET /api/v1/problems/CF2125D#checker
+    CF2127D:
+      kind: token
+      source: GET /api/v1/problems/CF2127D#checker
+preparation:
+  problem_count: 3
+  rating_counts:
+    '1400': 1
+    '1600': 1
+    '1800': 1
+  five_conditions: true

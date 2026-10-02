@@ -22,6 +22,9 @@ from .types import (
     SubmissionRecord,
     SubmissionStatus,
 )
+from .contests import (ContestProblem, ContestSnapshot, contest_identifier,
+                       public_contest, public_problem_identifier)
+from .standings import OfficialPerformance, account_identity, parse_performance
 
 
 T = TypeVar("T")
@@ -84,6 +87,7 @@ class OJClient:
         client: Optional[httpx.Client] = None,
         sleeper: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
+        contest_id: Optional[str] = None,
     ):
         normalized_url = base_url.strip().rstrip("/")
         parsed = urlsplit(normalized_url)
@@ -109,6 +113,7 @@ class OJClient:
         self._owns_client = client is None
         self._sleep = sleeper
         self._monotonic = monotonic
+        self.contest_id = contest_identifier(contest_id) if contest_id is not None else None
 
     def close(self) -> None:
         if self._owns_client:
@@ -145,7 +150,7 @@ class OJClient:
         message = f"{message}: {parsed.message[:500]}"
         return parsed.code, message.replace(self._api_token, "<redacted>")
 
-    def _request_json(
+    def _request_response(
         self,
         method: str,
         path: str,
@@ -153,7 +158,7 @@ class OJClient:
         expected_statuses: Sequence[int],
         submission_state_unknown_on_timeout: bool = False,
         **kwargs: Any,
-    ) -> Mapping[str, Any]:
+    ) -> httpx.Response:
         headers = dict(kwargs.pop("headers", {}))
         headers["Authorization"] = f"Bearer {self._api_token}"
         try:
@@ -198,6 +203,13 @@ class OJClient:
                 remote_code=remote_code,
                 request_id=request_id,
             )
+        return response
+
+    def _request_json(self, method, path, *, expected_statuses,
+                      submission_state_unknown_on_timeout=False, **kwargs):
+        response = self._request_response(method, path, expected_statuses=expected_statuses,
+            submission_state_unknown_on_timeout=submission_state_unknown_on_timeout, **kwargs)
+        request_id = response.headers.get("x-request-id")
         try:
             body = response.json()
         except ValueError as exc:
@@ -219,6 +231,31 @@ class OJClient:
                 request_id=request_id,
             )
         return body
+
+    def _public_html(self, path):
+        response = self._request_response("GET", path, expected_statuses=(200,), follow_redirects=False)
+        if (not response.headers.get("content-type", "").lower().startswith("text/html")
+                or len(response.content) > 2_000_000):
+            raise OJProtocolError("Invalid public contest page", kind=ClientErrorKind.PROTOCOL,
+                                  method="GET", path=path)
+        return response.text
+
+    def get_contest(self, contest_id: str) -> ContestSnapshot:
+        contest_id = contest_identifier(contest_id)
+        path = f"/contests/{contest_id}"
+        try:
+            title, status, entries = public_contest(self._public_html(path), contest_id, self.base_url)
+            problems = []
+            for label, problem_title in entries:
+                problem_path = f"{path}/problems/{label}"
+                problem_id = public_problem_identifier(self._public_html(problem_path))
+                if problem_id in {problem.problem_id for problem in problems}:
+                    raise ProtocolValidationError("Duplicate contest problem ID")
+                problems.append(ContestProblem(label, problem_id, problem_title))
+            return ContestSnapshot(contest_id, title, status, problems)
+        except ProtocolValidationError as exc:
+            raise OJProtocolError("Unrecognized public contest data", kind=ClientErrorKind.PROTOCOL,
+                                  method="GET", path=path) from exc
 
     @staticmethod
     def _parse(
@@ -243,6 +280,63 @@ class OJClient:
         body = self._request_json("GET", path, expected_statuses=(200,))
         return self._parse(AgentProblem, body, method="GET", path=path)
 
+    def get_checker_metadata(self, problem_id: str):
+        """Allowlist only checker; ordinary problem content never reaches tools."""
+        path = f"/api/v1/problems/{self._resource_id(problem_id, 'problem_id')}"
+        try:
+            body = self._request_json("GET", path, expected_statuses=(200,))
+        except OJClientError as exc:
+            # Ordinary metadata error prose may contain fields excluded from the Agent.
+            exc.args = ("Public checker metadata unavailable",)
+            exc.remote_code = None
+            raise
+        if body.get("problem_id") != problem_id:
+            raise OJProtocolError("Checker metadata identity mismatch", kind=ClientErrorKind.PROTOCOL,
+                                  method="GET", path=path)
+        value = body.get("checker")
+        return {"checker": value if isinstance(value, str) and len(value) <= 50 else None,
+                "source": f"GET {path}#checker"}
+
+    def get_account_identity(self):
+        return account_identity(self._request_json("GET", "/api/v1/me", expected_statuses=(200,)))
+
+    def get_official_performance(self, contest_id, identity):
+        """GET only. Identity is supplied by the frozen run, never a row index."""
+        from dataclasses import replace
+        from datetime import datetime, timezone
+        contest_id = contest_identifier(contest_id)
+        source = f"GET /api/v1/contests/{contest_id}/standings#rows[].performance"
+        if (not isinstance(identity, dict) or isinstance(identity.get("user_id"), bool)
+                or not isinstance(identity.get("user_id"), int) or identity["user_id"] < 1):
+            return OfficialPerformance(official_performance_status="identity_unresolved",
+                                       official_performance_source=source)
+        current = self.get_account_identity()
+        if current is None or current["user_id"] != identity.get("user_id"):
+            return OfficialPerformance(official_performance_status="identity_unresolved",
+                official_performance_source=source, official_performance_identity=identity)
+        response = self._request_response("GET", f"/api/v1/contests/{contest_id}/standings",
+                                          expected_statuses=(200,), follow_redirects=False)
+        try:
+            body = response.json() if len(response.content) <= 2_000_000 else None
+        except ValueError:
+            body = None
+        observation = parse_performance(body, contest_id, identity)
+        return replace(observation, official_performance_fetched_at=datetime.now(timezone.utc).isoformat())
+
+    def get_feedback_mode(self):
+        """Record an explicit server declaration; never infer it from role/diagnostics.
+
+        Current MiniOJ may omit this optional capability. Unknown stays unknown;
+        experiment conditions can require an explicit declaration before paid calls.
+        """
+        path = "/api/v1/me"
+        body = self._request_json("GET", path, expected_statuses=(200,))
+        mode = body.get("feedback_mode")
+        if mode in ("full", "verdict_only"):
+            return {"mode": mode, "source": "GET /api/v1/me#feedback_mode", "status": "confirmed"}
+        return {"mode": None, "source": "GET /api/v1/me",
+                "status": "not_advertised" if mode is None else "unrecognized"}
+
     def run_code(self, code: str, stdin: str) -> CustomRunResult:
         if not isinstance(code, str) or not code:
             raise ValueError("code must be a non-empty string")
@@ -261,26 +355,41 @@ class OJClient:
         raw_problem_id = problem_id.strip() if isinstance(problem_id, str) else ""
         if not raw_problem_id:
             raise ValueError("problem_id must be a non-empty string")
-        path = "/api/v1/submissions"
-        body = self._request_json(
-            "POST",
-            path,
-            expected_statuses=(202,),
-            submission_state_unknown_on_timeout=True,
-            json={
-                "problem_id": raw_problem_id,
-                "language": "cpp20",
-                "source_code": code,
-            },
-        )
-        record = self._parse(SubmissionRecord, body, method="POST", path=path)
-        if record.known_status is not SubmissionStatus.QUEUED or record.verdict is not None:
-            raise OJProtocolError(
-                "Formal submission creation must return QUEUED without a verdict",
-                kind=ClientErrorKind.PROTOCOL,
+        path = (f"/api/v1/contests/{self.contest_id}/submissions" if self.contest_id
+                else "/api/v1/submissions")
+        try:
+            body = self._request_json(
+                "POST",
+                path,
+                expected_statuses=(202,),
+                submission_state_unknown_on_timeout=True,
+                json={
+                    "problem_id": raw_problem_id,
+                    "language": "cpp20",
+                    "source_code": code,
+                },
+            )
+            record = self._parse(SubmissionRecord, body, method="POST", path=path)
+            if record.known_status is not SubmissionStatus.QUEUED or record.verdict is not None:
+                raise OJProtocolError(
+                    "Formal submission creation must return QUEUED without a verdict",
+                    kind=ClientErrorKind.PROTOCOL,
+                    method="POST",
+                    path=path,
+                )
+        except OJProtocolError as exc:
+            # HTTP 202 means the server may already have created a submission.
+            # Without a valid queued record, its ID/result cannot be recovered
+            # safely and repeating the POST could create a duplicate.
+            raise OJResultUnknownError(
+                f"Formal submission returned HTTP 202 with an invalid response; "
+                f"the remote creation state is unknown: {exc}",
+                kind=ClientErrorKind.RESULT_UNKNOWN,
                 method="POST",
                 path=path,
-            )
+                http_status=202,
+                submission_state_unknown=True,
+            ) from exc
         return record
 
     def get_submission(self, submission_id: str) -> SubmissionRecord:

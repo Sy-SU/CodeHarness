@@ -6,8 +6,9 @@ import httpx
 
 from agent.core.agent import CodingAgent
 from agent.core.context import ContextBuilder
-from agent.core.policy import ModelPolicy
-from agent.models.types import LLMResponse, ModelProfile, TokenUsage
+from agent.core.policy import DebugEscalationPolicy, ModelPolicy
+from agent.models.registry import ModelDefinition
+from agent.models.types import CostEstimate, LLMResponse, ModelProfile, TokenUsage
 from agent.oj_client.client import AgentProblem, OJClient, ProblemLimits, ProblemSample
 from agent.oj_client.types import CustomRunResult, JudgeFeedback, SubmissionRecord
 from agent.tools.runtime import build_default_tools
@@ -30,8 +31,14 @@ class FakeRouter:
             next(self.contents), TokenUsage(10, 5), "fake", "fake-model", profile
         )
 
+    def route(self, profile):
+        return ModelDefinition(provider="fake", model="fake-model",
+                               input_token_limit=32000, parameters={"max_tokens": 4096},
+                               input_cost_per_million=1, output_cost_per_million=1,
+                               currency="CNY")
+
     def estimate_cost(self, response):
-        return 0.001
+        return CostEstimate(amount=0.001, currency="CNY", known=True)
 
 
 class FakeOJ:
@@ -49,6 +56,7 @@ class FakeOJ:
             "",
             ProblemLimits(1000, 128),
             [ProblemSample("1 2\n", "3\n")],
+            extra_fields={"checker": "tokens"},
         )
 
     def get_problem(self, problem_id):
@@ -81,13 +89,13 @@ class FakeOJ:
         )
 
 
-def make_agent(tmp_path, router, oj, mode):
+def make_agent(tmp_path, router, oj, mode, policy=None):
     workspace = TaskWorkspace.create(tmp_path, f"task-{mode}", "sum", mode)
     tools = build_default_tools(oj, workspace)
     return (
         CodingAgent(
             router,
-            ModelPolicy(),
+            policy or ModelPolicy(),
             ContextBuilder(),
             tools,
             workspace,
@@ -108,18 +116,24 @@ def test_code_only_has_one_model_call_submission_and_no_feedback(tmp_path):
     assert workspace.state.current_phase == "DONE"
 
 
-def test_harness_retries_escalates_and_records_required_trace_events(tmp_path):
+def test_harness_retries_without_escalation_and_records_required_trace_events(tmp_path):
     oj = FakeOJ(["WA", "WA", "AC"])
     router = FakeRouter(["Use addition.", CPP_BAD, CPP_BAD, CPP_GOOD, "Looks correct."])
-    agent, workspace = make_agent(tmp_path, router, oj, "harness-loop")
+    policy = ModelPolicy(
+        debug_escalation=DebugEscalationPolicy(
+            enabled=True,
+            threshold=2,
+            failure_kinds=frozenset({"WA"}),
+        )
+    )
+    agent, workspace = make_agent(tmp_path, router, oj, "harness-loop", policy)
     result = agent.run_harness_loop(max_attempts=3)
     assert result.solved and result.submissions == 3
     assert router.profiles == [
         ModelProfile.STRONG,
         ModelProfile.STANDARD,
         ModelProfile.STANDARD,
-        ModelProfile.STRONG,
-        ModelProfile.STRONG,
+        ModelProfile.STANDARD,
     ]
     events = [
         json.loads(line)["type"]
@@ -133,7 +147,8 @@ def test_harness_retries_escalates_and_records_required_trace_events(tmp_path):
         "SUBMISSION",
         "JUDGE_RESULT",
         "STATE_CHANGE",
-        "MODEL_ESCALATION",
+        "CODE_VERSION",
+        "SAMPLE_RESULT",
     ):
         assert required in events
 

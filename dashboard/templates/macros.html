@@ -1,0 +1,25 @@
+{% macro badge(value) -%}
+<span class="badge {% if value == 'AC' or value == 'accepted' %}good{% elif value in ['WA', 'CE', 'RE', 'TLE', 'MLE', 'OLE'] %}bad{% elif value in ['IE', 'client_failure', 'model_failure', 'result_unknown', 'remote_infrastructure_failure'] %}warn{% endif %}">{{ value|display }}</span>
+{%- endmacro %}
+{% macro cost(amount, currency, status) -%}
+{% if amount is not none and currency %}{{ currency }} {{ '%.6f'|format(amount) }}{% elif status == 'not_applicable' %}{{ t('Not applicable') }}{% else %}{{ t('Unknown') }}{% endif %}
+{%- endmacro %}
+{% macro card(label, value, note='', field='') -%}
+<div class="metric"><span class="metric-label">{{ t(label) }}</span><strong {% if field %}data-summary="{{ field }}"{% endif %}>{{ value|display }}</strong>{% if note %}<small>{{ t(note) }}</small>{% endif %}</div>
+{%- endmacro %}
+{% macro task_table(rows) -%}
+<div class="table-wrap"><table class="task-table"><thead><tr>{% for label in ['Task / Problem', 'Mode / Profile', 'Task status', 'Phase', 'Verdict', 'LLM calls', 'Submissions', 'Duration', 'Updated (UTC)'] %}<th>{{ t(label) }}</th>{% endfor %}</tr></thead><tbody>
+{% for task in rows %}<tr>
+<td class="task-cell"><a class="mono" href="/tasks/{{ task.task_id }}">{{ task.task_id }}</a><small>{{ task.problem_id|display }}{% if task.data_status != 'ok' %} · <span class="warning">{{ t('Partial Data') }}</span>{% endif %}</small></td>
+<td>{{ task.mode|display }}<small>{{ task.profile|display }}</small></td><td>{{ badge(task.status) }}</td><td class="mono">{{ task.current_phase|display }}</td><td>{{ badge(task.final_verdict) }}</td><td>{{ task.llm_call_count|display }}</td><td>{{ task.submission_count|display }}<small>{{ t('{count} attempts', count=task.submission_attempt_count|display) }}</small></td><td class="nowrap">{{ task.duration|duration }}</td><td class="time">{{ task.updated_at|timestamp }}</td>
+</tr>{% else %}<tr><td colspan="9" class="empty">{{ t('No tasks match this view.') }}</td></tr>{% endfor %}
+</tbody></table></div>
+{%- endmacro %}
+{% macro timeline_event(event) -%}
+<div class="timeline-event"><div class="event-time mono">{{ event.timestamp|timestamp }}</div><div class="event-body"><div><span class="event-type">{{ event.event_type }}</span><span class="phase-label">{{ event.phase|display }}</span></div><p>{{ event.summary }}</p>{% if event.original_type %}<small>{{ t('Original type:') }} {{ event.original_type }}</small>{% endif %}<details><summary>{{ t('Safe metadata') }}{% if event.correlation_id %} · {{ event.correlation_id }}{% endif %}</summary><pre>{{ event.metadata|pretty }}</pre></details></div></div>
+{%- endmacro %}
+{% macro compact_task_table(rows) -%}
+<div class="table-wrap"><table><thead><tr>{% for label in ['Task / Problem', 'Mode / Profile', 'Task status', 'Verdict', 'Estimated Cost'] %}<th>{{ t(label) }}</th>{% endfor %}</tr></thead><tbody>{% for task in rows %}<tr>
+<td><a href="/tasks/{{ task.task_id }}">{{ task.problem_id|display }}</a><small class="mono">{{ task.task_id }}</small></td><td>{{ task.mode|display }}<small>{{ task.policy|display }}</small></td><td>{{ badge(task.status) }}<small>{{ task.current_phase|display }}</small></td><td>{{ badge(task.final_verdict) }}</td><td>{{ cost(task.estimated_cost, task.cost_currency, task.cost_status) }}</td>
+</tr>{% else %}<tr><td colspan="5" class="empty">{{ t('No tasks match this view.') }}</td></tr>{% endfor %}</tbody></table></div>
+{%- endmacro %}

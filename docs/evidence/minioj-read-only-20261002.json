@@ -1,0 +1,124 @@
+{
+  "verified_date": "2026-10-02",
+  "methods": [
+    "GET"
+  ],
+  "llm_calls": 0,
+  "custom_runs": 0,
+  "formal_submissions": 0,
+  "identity": {
+    "user_id": 3,
+    "username": "CodingAgent"
+  },
+  "standings_endpoint": "/api/v1/contests/1/standings",
+  "performance_field": "rows[].performance",
+  "official_performance": 800,
+  "performance_scope": "contest_account",
+  "html_parity": true,
+  "sample_judge_public_api": "not_advertised",
+  "checker_metadata": {
+    "CF1454A": "testlib",
+    "CF1454B": "tokens"
+  },
+  "smallset_metadata": [
+    {
+      "problem_id": "CF2119B",
+      "rating": 1200,
+      "rating_source": "GET /api/v1/problems/CF2119B#rating",
+      "checker": "yesno",
+      "fetched_at": "2026-10-02T07:18:32.061450+00:00"
+    },
+    {
+      "problem_id": "CF2118B",
+      "rating": 1200,
+      "rating_source": "GET /api/v1/problems/CF2118B#rating",
+      "checker": "testlib",
+      "fetched_at": "2026-10-02T07:18:32.083281+00:00"
+    },
+    {
+      "problem_id": "CF2113B",
+      "rating": 1200,
+      "rating_source": "GET /api/v1/problems/CF2113B#rating",
+      "checker": "yesno",
+      "fetched_at": "2026-10-02T07:18:32.100865+00:00"
+    },
+    {
+      "problem_id": "CF2127C",
+      "rating": 1400,
+      "rating_source": "GET /api/v1/problems/CF2127C#rating",
+      "checker": "tokens",
+      "fetched_at": "2026-10-02T07:18:32.119369+00:00"
+    },
+    {
+      "problem_id": "CF2111D",
+      "rating": 1400,
+      "rating_source": "GET /api/v1/problems/CF2111D#rating",
+      "checker": "testlib",
+      "fetched_at": "2026-10-02T07:18:32.138590+00:00"
+    },
+    {
+      "problem_id": "CF2110C",
+      "rating": 1400,
+      "rating_source": "GET /api/v1/problems/CF2110C#rating",
+      "checker": "testlib",
+      "fetched_at": "2026-10-02T07:18:32.156564+00:00"
+    },
+    {
+      "problem_id": "CF2125D",
+      "rating": 1600,
+      "rating_source": "GET /api/v1/problems/CF2125D#rating",
+      "checker": "tokens",
+      "fetched_at": "2026-10-02T07:18:32.171849+00:00"
+    },
+    {
+      "problem_id": "CF2103C",
+      "rating": 1600,
+      "rating_source": "GET /api/v1/problems/CF2103C#rating",
+      "checker": "yesno",
+      "fetched_at": "2026-10-02T07:18:32.190293+00:00"
+    },
+    {
+      "problem_id": "CF2084D",
+      "rating": 1600,
+      "rating_source": "GET /api/v1/problems/CF2084D#rating",
+      "checker": "testlib",
+      "fetched_at": "2026-10-02T07:18:32.206349+00:00"
+    },
+    {
+      "problem_id": "CF2127D",
+      "rating": 1800,
+      "rating_source": "GET /api/v1/problems/CF2127D#rating",
+      "checker": "tokens",
+      "fetched_at": "2026-10-02T07:18:32.223653+00:00"
+    },
+    {
+      "problem_id": "CF2120D",
+      "rating": 1800,
+      "rating_source": "GET /api/v1/problems/CF2120D#rating",
+      "checker": "tokens",
+      "fetched_at": "2026-10-02T07:18:32.242400+00:00"
+    },
+    {
+      "problem_id": "CF2092D",
+      "rating": 1800,
+      "rating_source": "GET /api/v1/problems/CF2092D#rating",
+      "checker": "testlib",
+      "fetched_at": "2026-10-02T07:18:32.258470+00:00"
+    }
+  ],
+  "openapi_sha256": "86ca7103f36b72f142557807bfd9a58d67be65bfff826f856982d83458392955",
+  "implemented_ingestion_verified_at": "2026-10-02T08:45:34.905800+00:00",
+  "implemented_ingestion": {
+    "official_performance": 800,
+    "official_performance_status": "confirmed",
+    "official_performance_source": "GET /api/v1/contests/1/standings#rows[].performance",
+    "official_performance_fetched_at": "2026-10-02T08:45:34.872275+00:00",
+    "official_performance_scope": "contest_account",
+    "official_performance_identity": {
+      "user_id": 3,
+      "username": "CodingAgent"
+    },
+    "official_performance_endpoint_sha256": null
+  },
+  "successful_GET_count": 29
+}

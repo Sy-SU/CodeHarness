@@ -6,8 +6,10 @@ import json
 import os
 import re
 import enum
+import fcntl
 import tempfile
 import uuid
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,7 +17,7 @@ from typing import Any, Dict, List, Optional
 
 
 TASK_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
-MANAGED_FILES = {"task.json", "state.json", "events.jsonl"}
+MANAGED_FILES = {"task.json", "state.json", "events.jsonl", "checkpoint.json", ".run.lock"}
 SECRET_KEYS = {"authorization", "api_key", "api_token", "password", "secret", "token"}
 BEARER_PATTERN = re.compile(r"(?i)bearer\s+[^\s,;]+")
 
@@ -42,6 +44,21 @@ class EventType(str, enum.Enum):
     JUDGE_RESULT = "JUDGE_RESULT"
     STATE_CHANGE = "STATE_CHANGE"
     MODEL_ESCALATION = "MODEL_ESCALATION"
+    CODE_VERSION = "CODE_VERSION"
+    TASK_TERMINATED = "TASK_TERMINATED"
+    SAMPLE_RESULT = "SAMPLE_RESULT"
+    REPLAN = "REPLAN"
+    TASK_RESUMED = "TASK_RESUMED"
+    BUDGET_RESERVATION = "BUDGET_RESERVATION"
+    TASK_INTERRUPTED = "TASK_INTERRUPTED"
+    FEEDBACK_MODE_OBSERVED = "FEEDBACK_MODE_OBSERVED"
+    FEEDBACK_MODE_EFFECTIVE = "FEEDBACK_MODE_EFFECTIVE"
+    CHECKER_RESOLVED = "CHECKER_RESOLVED"
+    RECOVERY_METRICS = "RECOVERY_METRICS"
+    REVIEW_RESULT = "REVIEW_RESULT"
+    GENERATED_CHECKER = "GENERATED_CHECKER"
+    GENERATED_CHECKER_RESULT = "GENERATED_CHECKER_RESULT"
+    CHECKER_RUN = "CHECKER_RUN"
 
 
 @dataclass(frozen=True)
@@ -79,21 +96,57 @@ class TaskState:
     problem_id: str
     current_phase: str = "PLAN"
     attempt_count: int = 0
+    submission_attempt_count: int = 0
     submission_count: int = 0
     last_submission_id: Optional[str] = None
     last_verdict: Optional[str] = None
     last_outcome_kind: Optional[str] = None
     current_model_profile: Optional[str] = None
+    last_model_call_id: Optional[str] = None
     llm_call_count: int = 0
+    llm_success_count: int = 0
+    llm_failure_count: int = 0
+    llm_usage_missing_count: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
-    estimated_cost: float = 0.0
+    estimated_cost: Optional[float] = 0.0
+    cost_estimate_status: str = "not_applicable"
+    cost_currency: Optional[str] = None
     calls_per_model_profile: Dict[str, int] = field(default_factory=dict)
+    model_failures_by_kind: Dict[str, int] = field(default_factory=dict)
     debug_iterations: int = 0
     wall_clock_seconds: float = 0.0
     solved: bool = False
     mode: str = ""
     experiment_variant: str = ""
+    solution_version: Optional[str] = None
+    solution_sha256: Optional[str] = None
+    solution_model_call_id: Optional[str] = None
+    last_submission_solution_version: Optional[str] = None
+    last_submission_code_sha256: Optional[str] = None
+    terminal_status: Optional[str] = None
+    termination_reason: Optional[str] = None
+    error_kind: Optional[str] = None
+    consecutive_debug_failures: int = 0
+    replan_count: int = 0
+    custom_run_count: int = 0
+    budget_committed_cny: float = 0.0
+    resume_count: int = 0
+    experiment_id: Optional[str] = None
+    experiment_strategy: Optional[str] = None
+    configuration_fingerprint: Optional[str] = None
+    expected_feedback_mode: Optional[str] = None
+    actual_feedback_mode: Optional[str] = None
+    effective_feedback_mode: Optional[str] = None
+    feedback_policy: Optional[str] = None
+    feedback_mode_source: Optional[str] = None
+    feedback_mode_status: str = "unobserved"
+    sample_checker: Dict[str, Any] = field(default_factory=dict)
+    sample_gate_status: Optional[str] = None
+    sample_gate_reject_count: int = 0
+    sample_check_unverifiable_count: int = 0
+    recovery_metrics: Dict[str, Any] = field(default_factory=dict)
+    public_sample_count: Optional[int] = None
 
 
 class TraceWriter:
@@ -103,10 +156,12 @@ class TraceWriter:
         *,
         task_id: str = "",
         phase_getter=None,
+        schema_version: str = "phase1-v1",
     ):
         self.path = path
         self.task_id = task_id
         self.phase_getter = phase_getter
+        self.schema_version = schema_version
 
     def append(
         self,
@@ -126,6 +181,7 @@ class TraceWriter:
             event_id=event_id,
             task_id=self.task_id,
             phase=self.phase_getter() if self.phase_getter is not None else None,
+            schema_version=self.schema_version,
         )
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record.as_dict(), ensure_ascii=False, default=str) + "\n")
@@ -137,18 +193,31 @@ class TraceWriter:
 class TaskWorkspace:
     """Own all files for one isolated agent task."""
 
-    def __init__(self, root: Path, state: TaskState):
+    def __init__(
+        self,
+        root: Path,
+        state: TaskState,
+        *,
+        trace_schema_version: str = "phase1-v1",
+    ):
         self.root = root.resolve()
         self.state = state
         self.trace = TraceWriter(
             self.root / "events.jsonl",
             task_id=state.task_id,
             phase_getter=lambda: self.state.current_phase,
+            schema_version=trace_schema_version,
         )
 
     @classmethod
     def create(
-        cls, workspace_root: Path, task_id: str, problem_id: str, mode: str
+        cls,
+        workspace_root: Path,
+        task_id: str,
+        problem_id: str,
+        mode: str,
+        *,
+        trace_schema_version: str = "phase1-v1",
     ) -> "TaskWorkspace":
         if not TASK_ID_PATTERN.fullmatch(task_id):
             raise ValueError("Invalid task ID")
@@ -158,11 +227,55 @@ class TaskWorkspace:
         root.mkdir(parents=True, exist_ok=False)
         (root / "artifacts").mkdir()
         state = TaskState(task_id=task_id, problem_id=problem_id, mode=mode)
-        workspace = cls(root, state)
+        workspace = cls(root, state, trace_schema_version=trace_schema_version)
         workspace.write_json("task.json", {"task_id": task_id, "problem_id": problem_id, "mode": mode})
         workspace.save_state()
         (root / "events.jsonl").touch()
         return workspace
+
+    @classmethod
+    def load(cls, workspace_root: Path, task_id: str) -> "TaskWorkspace":
+        if not TASK_ID_PATTERN.fullmatch(task_id):
+            raise ValueError("Invalid task ID")
+        lexical = workspace_root.resolve() / task_id
+        if lexical.is_symlink() or not lexical.is_dir():
+            raise ValueError("Task workspace must be an existing directory, not a symlink")
+        root = lexical.resolve()
+        if workspace_root.resolve() not in root.parents:
+            raise ValueError("Task path escapes workspace root")
+        temporary = cls(root, TaskState(task_id=task_id, problem_id=""))
+        checkpoint = temporary.read_json("checkpoint.json")
+        if checkpoint.get("schema_version") != "phase4-v1":
+            raise ValueError("Only phase4-v1 harness checkpoints can be resumed")
+        state = TaskState(**checkpoint["state"])
+        task = temporary.read_json("task.json")
+        if (
+            state.task_id != task_id
+            or state.problem_id != task.get("problem_id")
+            or state.mode != "harness-loop"
+            or task.get("mode") != state.mode
+        ):
+            raise ValueError("Checkpoint identity does not match task.json")
+        problem = checkpoint.get("problem")
+        if problem is not None and (
+            not isinstance(problem, dict) or problem.get("problem_id") != state.problem_id
+        ):
+            raise ValueError("Checkpoint problem context belongs to a different task")
+        return cls(root, state, trace_schema_version="phase4-v1")
+
+    @contextmanager
+    def exclusive_run(self):
+        """Prevent two CLI processes from advancing the same checkpoint."""
+        path = self._safe_path(".run.lock")
+        descriptor = os.open(str(path), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise ValueError("This task is already running in another process") from exc
+            yield
+        finally:
+            os.close(descriptor)
 
     def _safe_path(self, relative: str) -> Path:
         if not isinstance(relative, str) or not relative:
