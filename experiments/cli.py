@@ -29,6 +29,9 @@ def main(argv=None):
     parser.add_argument("--preflight-id", help="Frozen preflight ID required for prepared formal/pilot runs")
     parser.add_argument("--execution-seed", type=int, help="Preflight order seed; default: 20261002")
     parser.add_argument("--offline", action="store_true", help="Preflight without GETs; feedback remains unknown/BLOCKED")
+    parser.add_argument("--main-experiment-id", help="Create a final-main receipt for this future ID; never execute it")
+    parser.add_argument("--pilot-run-id", help="Validated Pilot-v2 history for final-main preflight")
+    parser.add_argument("--checker-smoke-id", help="Bind independent checker-v2 live smoke evidence to final-main preflight")
     parser.add_argument("--workspace-root", type=Path, default=Path("workspace"))
     parser.add_argument("--max-cost-cny", type=float,
                         help="Override each task's CNY limit; overall YAML batch cap remains unchanged")
@@ -49,6 +52,18 @@ def main(argv=None):
     parser.add_argument("--llm-checker", choices=("disabled", "advisory", "submit_on_pass"), help="New contest generated-checker policy")
     args = parser.parse_args(argv)
     executing = args.command in {"run", "resume", "contest", "contest-resume"}
+    if args.checker_smoke_id and (args.command != "preflight" or not args.main_experiment_id):
+        parser.error("--checker-smoke-id applies only to final-main preflight")
+    if args.main_experiment_id or args.pilot_run_id:
+        if args.command != "preflight" or not (args.main_experiment_id and args.pilot_run_id):
+            parser.error("--main-experiment-id and --pilot-run-id apply together only to preflight")
+        from .main_preflight import safe_id
+        try:
+            safe_id(args.main_experiment_id); safe_id(args.pilot_run_id)
+            if args.main_experiment_id in {args.experiment_id, args.pilot_run_id}:
+                raise ValueError("Main, Pilot and preflight IDs must be distinct")
+        except ValueError:
+            parser.error("Invalid or reused final-main identity")
     if executing and (not args.confirm_model_call or not args.confirm_submit):
         parser.error("Both --confirm-model-call and --confirm-submit are required")
     if args.command != "preflight" and (args.execution_seed is not None or args.offline):
@@ -88,11 +103,30 @@ def main(argv=None):
                     seed=args.execution_seed, offline=args.offline)
             except (OSError, ValueError, TypeError, KeyError):
                 report = blocked_preflight("budget_connection_or_snapshot_config_invalid", config_path=args.config)
+            if args.main_experiment_id:
+                from .main_preflight import extend_main_preflight, load_pilot_evidence
+                pilot, pilot_error, smoke, smoke_error = None, None, None, None
+                try:
+                    pilot = load_pilot_evidence(args.workspace_root, args.pilot_run_id)
+                except (OSError, ValueError, TypeError, KeyError):
+                    pilot_error = "integrity_or_availability"
+                if args.checker_smoke_id:
+                    from .checker_smoke import load_checker_smoke
+                    try:
+                        smoke = load_checker_smoke(args.workspace_root, args.checker_smoke_id)
+                    except (OSError, ValueError, TypeError, KeyError):
+                        smoke_error = "integrity_or_availability"
+                report = extend_main_preflight(report, config, main_experiment_id=args.main_experiment_id,
+                    workspace_root=args.workspace_root, pilot=pilot, pilot_error=pilot_error, smoke=smoke, smoke_error=smoke_error)
+        if args.main_experiment_id and not report.get("main_final_preflight"):
+            from .main_preflight import blocked_main_preflight
+            report = blocked_main_preflight(report, main_experiment_id=args.main_experiment_id, pilot_run_id=args.pilot_run_id)
         try:
             report = save_preflight(report, args.workspace_root, args.experiment_id)
         except (OSError, ValueError) as exc:
             parser.error(f"Preflight storage unavailable ({type(exc).__name__})")
         print(json.dumps({"preflight_id": args.experiment_id, "status": report["status"],
+            "gate": report.get("main_final_preflight", {}).get("gate"),
             "task_count": report["task_count"], "blockers": report["blockers"], "warnings": report["warnings"],
             "reports": str(preflight_directory(args.workspace_root, args.experiment_id))}, ensure_ascii=False, indent=2))
         return 2 if report["status"] == "BLOCKED" else 0

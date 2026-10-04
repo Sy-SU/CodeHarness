@@ -3,7 +3,7 @@
 # 60 CNY is an allocation ceiling, not expected spend. Supplier verification remains null.
 schema_version: phase5-v1
 name: small-five-conditions-12-problems
-model_config: models.yaml
+model_config: models.infrastructure.yaml
 problems:
 - CF2119B
 - CF2118B
@@ -99,9 +99,10 @@ problem_metadata:
     rating_source: GET /api/v1/problems/CF2092D#rating
     fetched_at: '2026-10-02T07:18:32.258470+00:00'
 sample_checking:
-  version: sample_check_v1
+  version: sample_check_v3
   on_unverifiable: stop
-  llm_checker: submit_on_pass
+  llm_checker: disabled
+  unverifiable_output: execution_only
   overrides:
     CF2119B:
       kind: unknown

@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 import httpx
 
-from agent.core.checker import CheckerSpec, SampleGatePolicy
+from agent.core.checker import SAMPLE_POLICY, CheckerSpec, SampleGatePolicy, sample_mode
 from agent.core.policy import ModelPolicy
 from agent.execution import fingerprint
 from agent.models.registry import ModelRegistry
@@ -21,11 +21,19 @@ from .order import execution_order
 from .preflight_models import apply_model_metadata, configured_models, model_checks, registry_profiles
 
 PREFLIGHT_VERSION = "experiment_preflight_v1"
-METRIC_FIELDS = ("problem_id", "rating", "condition", "mode", "profile", "actual_models",
+METRIC_FIELDS = ("llm_checker_generation_count", "llm_checker_generation_failure_count",
+    "sample_semantic_verified_count", "sample_output_unverifiable_count", "sample_execution_failure_count",
+    "formal_submit_after_unverifiable_sample_count", "sample_execution_recovery",
+    "llm_checker_sanity_pass_count", "llm_checker_sanity_failure_count", "llm_checker_candidate_pass_count",
+    "llm_checker_candidate_reject_count", "llm_checker_execution_failure_count", "unverified_checker_stop_count",
+    "problem_id", "rating", "condition", "mode", "profile", "actual_models",
     "checker_type", "checker_source", "checker_policy", "solved", "final_verdict", "first_try_ac",
     "recovered_to_ac", "recovery_type", "formal_recovery_to_ac", "llm_calls", "input_tokens", "output_tokens",
     "estimated_cost_cny", "custom_runs", "formal_submissions", "candidate_versions", "debug_count", "replan_count",
-    "sample_gate_reject_count", "sample_check_unverifiable_count", "invalid_model_output_count", "wall_time")
+    "sample_gate_reject_count", "sample_check_unverifiable_count", "invalid_model_output_count", "wall_time",
+    "pilot_seen", "pilot_run_id", "checker_verification_class", "terminal_status", "sample_recovery_to_ac",
+    "duplicate_candidates", "reused_results", "cached_tokens", "provider_reported_cost", "billed_cost",
+    "all_formal_verdict_observations", "task_final_outcome")
 
 
 class PreflightError(ValueError):
@@ -148,7 +156,9 @@ def checker_preflight(config, observations):
                 row_blockers.append("checker_metadata_conflicts_with_frozen_override")
         trusted = policy is not None and (spec.kind in {"exact", "token"} or (spec.kind == "float"
             and spec.absolute_tolerance is not None and spec.relative_tolerance is not None))
-        llm = has_harness and not trusted and policy is not None and policy.llm_checker != "disabled"
+        mode = sample_mode(spec, policy)
+        execution_only = has_harness and mode == "execution_only"
+        llm = has_harness and not trusted and policy is not None and policy.version != SAMPLE_POLICY and policy.llm_checker != "disabled"
         count = observation.get("sample_count")
         if count == 0:
             llm = False  # runtime does not invoke a sample checker without samples
@@ -156,7 +166,7 @@ def checker_preflight(config, observations):
             row_warnings.append("float_tolerances_missing")
         if llm:
             row_warnings.append("LLM_checker_required_unverified")
-        if not trusted and has_harness and count != 0 and policy is not None and (
+        if not trusted and not execution_only and has_harness and count != 0 and policy is not None and (
             policy.on_unverifiable != "submit" and policy.llm_checker != "submit_on_pass"):
             row_blockers.append("required_checker_path_impossible")
         if not observation.get("metadata_available"):
@@ -164,8 +174,8 @@ def checker_preflight(config, observations):
         if count is None:
             row_warnings.append("sample_count_unavailable")
         if not trusted and not llm:
-            row_warnings.append("sample_check_unverifiable")
-        stratum = "fully_client_verifiable" if trusted else "llm_checker_required" if llm else "unverifiable"
+            row_warnings.append("execution_only_output_unverifiable" if execution_only else "sample_check_unverifiable")
+        stratum = "fully_client_verifiable" if trusted else "execution_only" if execution_only else "llm_checker_required" if llm else "unverifiable"
         rows.append({"problem_id": problem, "rating": local.get("rating", observation.get("rating")),
             "rating_source": local.get("rating_source"), "observed_rating": observation.get("rating"),
             "checker_type": spec.kind, "effective_checker_type": "llm_generated_unverified" if llm else spec.kind,
@@ -173,9 +183,13 @@ def checker_preflight(config, observations):
             "observed_checker": observation.get("checker"),
             "checker_policy": policy.version if policy else "legacy_whitespace_tokens_v1",
             "checker_spec": as_spec(spec), "float_abs_tolerance": spec.absolute_tolerance,
-            "float_rel_tolerance": spec.relative_tolerance, "requires_remote_checker": spec.kind == "special",
+            "float_rel_tolerance": spec.relative_tolerance, "requires_remote_checker": spec.kind == "special" and not execution_only,
             "remote_checker_available": False, "requires_llm_generated_checker": llm,
+            "sample_policy": mode, "semantic_verification": "client_verified" if trusted else "unavailable",
+            "formal_fallback": "enabled" if execution_only else "disabled",
+            "llm_checker_available_experimentally": True,
             "llm_checker_policy": policy.llm_checker if policy else "disabled", "sample_count": count,
+            "metadata_available": observation.get("metadata_available", False),
             "checker_stratum": stratum, "verified_checker": trusted,
             "problem_input_hash": observation.get("problem_input_hash"),
             "preflight_status": "BLOCKED" if row_blockers else "READY_WITH_WARNINGS" if row_warnings else "READY",
@@ -188,7 +202,7 @@ def checker_preflight(config, observations):
     strata = Counter(row["checker_stratum"] for row in rows)
     return {"problems": rows, "checker_distribution": {kind: counts[kind] for kind in kinds},
             "effective_checker_distribution": {kind: effective[kind] for kind in kinds},
-            "strata": {key: strata[key] for key in ("fully_client_verifiable", "remote_verifiable", "llm_checker_required", "unverifiable")},
+            "strata": {key: strata[key] for key in ("fully_client_verifiable", "remote_verifiable", "llm_checker_required", "execution_only", "unverifiable")},
             "llm_checker_risk": [row["problem_id"] for row in rows if row["requires_llm_generated_checker"]]}, blockers, warnings
 
 
@@ -338,6 +352,9 @@ def report_markdown(report):
                          ("Execution order", report["execution"]), ("Cost boundary", report["cost_boundary"]),
                          ("Side effects / GET audit", report["side_effects"])]:
         lines += ["", f"## {title}", "", "```json", json.dumps(value, ensure_ascii=False, indent=2), "```"]
+    if report.get("main_final_preflight"):
+        lines += ["", "## Main final gate / Pilot evidence", "", "```json",
+                  json.dumps(report["main_final_preflight"], ensure_ascii=False, indent=2), "```"]
     return "\n".join(lines) + "\n"
 
 
@@ -350,6 +367,9 @@ def save_preflight(report, workspace_root, preflight_id):
     artifacts = {"execution-order.json": report["execution"], "model-snapshot.json": {
         "models": report["models"], "condition_routes": report["condition_routes"]},
         "prompt-snapshot.json": report["prompt_snapshot"], "checker-summary.json": report["checker_summary"]}
+    if report.get("main_final_preflight"):
+        from .main_preflight import main_artifacts
+        artifacts.update(main_artifacts(report))
     report["artifact_hashes"] = {name: fingerprint(value) for name, value in artifacts.items()}
     report["preflight_report_hash"] = fingerprint(report)
     for name, value in {**artifacts, "preflight.json": report}.items():
@@ -371,10 +391,13 @@ def load_preflight(workspace_root, preflight_id):
             or report.get("preflight_id") != preflight_id):
         raise ValueError("Preflight report integrity mismatch")
     report["preflight_report_hash"] = signature
-    if set(report["artifact_hashes"]) != {"execution-order.json", "model-snapshot.json", "prompt-snapshot.json", "checker-summary.json"}:
+    allowed = {"execution-order.json", "model-snapshot.json", "prompt-snapshot.json", "checker-summary.json"}
+    if report.get("main_final_preflight"):
+        allowed.update({"final-receipt.json", "freeze-diff.json", "checker-matrix.json", "budget-summary.json"})
+    if set(report["artifact_hashes"]) != allowed:
         raise ValueError("Missing preflight snapshot")
     for name, expected in report["artifact_hashes"].items():
-        if name not in {"execution-order.json", "model-snapshot.json", "prompt-snapshot.json", "checker-summary.json"}:
+        if name not in allowed:
             raise ValueError("Invalid preflight artifact")
         path = directory / name
         if path.is_symlink() or fingerprint(json.loads(path.read_text(encoding="utf-8"))) != expected:

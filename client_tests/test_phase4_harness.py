@@ -10,6 +10,7 @@ import httpx
 from agent.cli import build_parser, main
 from agent.core.agent import CodingAgent
 from agent.core.context import ContextBuilder
+from agent.core.checker import SampleGatePolicy
 from agent.core.harness import HarnessLoop, HarnessPolicy
 from agent.core.policy import DebugEscalationPolicy, ModelPolicy
 from agent.models.registry import ModelDefinition
@@ -63,9 +64,7 @@ class Router:
         return LLMResponse(value, self.usage, "fake", "fake-model", profile)
 
     def estimate_cost(self, response):
-        if response.usage is None:
-            return CostEstimate(None, None, False, "missing_usage")
-        return CostEstimate(0.00015, "CNY", True)
+        return ModelRouter.estimate_cost(self, response)
 
 
 class OJ:
@@ -235,7 +234,8 @@ def test_ten_submission_attempts_are_a_hard_cap_across_replans(tmp_path):
 
 
 def test_cost_is_reserved_before_call_and_never_exceeds_one_yuan(tmp_path):
-    router = Router([good_variant(i) for i in range(30)], input_price=10)
+    router = Router([good_variant(i) for i in range(30)], input_price=10,
+                    usage=TokenUsage(32000, 4096))
     agent, workspace, oj = make_agent(tmp_path, router, OJ(["WA"] * 20))
     result = agent.run_harness_loop()
     assert result.terminal_status == "budget_exhausted"
@@ -253,7 +253,8 @@ def test_task_cost_must_be_a_positive_finite_number(cost):
 
 def test_custom_cost_can_exceed_default_and_is_enforced(tmp_path):
     assert HarnessPolicy().max_cost_cny == 1
-    router = Router([GOOD] * 30, input_price=10)
+    router = Router([good_variant(i) for i in range(30)], input_price=10,
+                    usage=TokenUsage(32000, 4096))
     agent, workspace, oj = make_agent(tmp_path, router, OJ(["WA"] * 20))
     result = agent.run_harness_loop(harness_policy=HarnessPolicy(max_cost_cny=2))
     assert result.termination_reason == "cost_reservation_limit"
@@ -462,7 +463,7 @@ def test_model_failure_and_invalid_code_stop_without_an_extra_call(tmp_path):
 
 def test_invalid_code_and_wrong_feedback_are_terminal(tmp_path):
     agent, workspace, oj = make_agent(tmp_path, Router(["plan", "not code"]))
-    result = agent.run_harness_loop()
+    result = agent.run_harness_loop(harness_policy=HarnessPolicy(max_code_extraction_retries=0))
     assert result.terminal_status == "invalid_model_output" and not oj.submissions
 
 
@@ -498,6 +499,8 @@ def test_known_submission_timeout_can_resume_with_no_repost(tmp_path):
 def test_resume_at_sample_stage_retains_code_plan_and_counters(tmp_path):
     router = Router(["saved plan", GOOD])
     agent, workspace, oj = make_agent(tmp_path, router, OJ(interrupt="sample"))
+    # This regression keeps the original v2 sample-resume contract.
+    agent.sample_checking = SampleGatePolicy(version="sample_check_v2", llm_checker="disabled")
     with pytest.raises(KeyboardInterrupt):
         agent.run_harness_loop()
     loaded = TaskWorkspace.load(tmp_path, workspace.state.task_id)
@@ -536,6 +539,8 @@ def test_explicit_fixed_profile_is_not_labeled_as_mixed(tmp_path):
 def test_resume_reloads_state_after_lock_instead_of_using_stale_preload(tmp_path):
     router = Router(["plan", GOOD])
     agent, workspace, oj = make_agent(tmp_path, router, OJ(interrupt="sample"))
+    # This regression keeps the original v2 sample-resume contract.
+    agent.sample_checking = SampleGatePolicy(version="sample_check_v2", llm_checker="disabled")
     with pytest.raises(KeyboardInterrupt):
         agent.run_harness_loop()
     stale = TaskWorkspace.load(tmp_path, workspace.state.task_id)
@@ -554,6 +559,8 @@ def test_resume_reloads_state_after_lock_instead_of_using_stale_preload(tmp_path
 def test_corrupted_candidate_on_resume_is_never_submitted(tmp_path):
     router = Router(["plan", GOOD])
     agent, workspace, oj = make_agent(tmp_path, router, OJ(interrupt="sample"))
+    # This regression keeps the original v2 sample-resume contract.
+    agent.sample_checking = SampleGatePolicy(version="sample_check_v2", llm_checker="disabled")
     with pytest.raises(KeyboardInterrupt):
         agent.run_harness_loop()
     workspace.write_text("artifacts/solutions/solution-v1.cpp", "changed source")

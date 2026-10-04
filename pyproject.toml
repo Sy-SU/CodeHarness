@@ -31,13 +31,15 @@ codeharness-model-client = "agent.models.cli:main"
 codeharness-oj-client = "agent.oj_client.cli:main"
 codeharness-report = "experiments.summarize:main"
 codeharness-experiment = "experiments.cli:main"
+codeharness-checker-smoke = "experiments.checker_smoke:main"
 codeharness-dashboard = "dashboard.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["agent", "experiments", "dashboard"]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/config/models.yaml", "/config/harness.yaml", "/config/* copy.yaml", "/config/*.local.yaml"]
+exclude = ["/config/models.yaml", "/config/harness.yaml", "/config/* copy.yaml", "/config/*.local.yaml",
+           "/docs/evidence/20261002-pilot-validation"]
 include = [
   "/.env.example",
   "/.gitignore",

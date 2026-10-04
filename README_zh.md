@@ -148,9 +148,11 @@ uv run codeharness-agent resume <task-id> \
   --confirm-model-call --confirm-submit
 ```
 
-默认 PLAN → strong、CODE / DEBUG → standard，不升级；可加 `--profile standard` 明确固定所有模型 Role。新任务冻结 sample_check_v1：明确的 exact/token/float 才按对应规则比较，float 不猜容差。特殊/未知输出可由 LLM 自写 checker，在 MiniOJ 远程运行；正向认可可继续提交，拒绝/未知保持 unverifiable、停止而不 DEBUG。LLM 判断不算可信样例通过/失败；3 个 DEBUG 候选连续失败后重 PLAN。正式 AC 后 REVIEW 只核对被评测版本/哈希并写总结，零模型调用、不改源码。
+默认 PLAN → strong、CODE / DEBUG → standard，不升级；可加 `--profile standard` 明确固定所有模型 Role。新任务冻结 sample_check_v3：可信 exact/token/双显式容差 float 做语义检查，其他输出用 execution-only 公开样例。已知 OK/exit=0 后允许正式 Judge，passed=null；运行失败可 DEBUG，未知/基础设施错误停止。Main 关闭 LLM checker，旧 v1/v2 实验性门禁保持冻结；3 个 DEBUG 候选连续失败后重 PLAN。正式 AC 后 REVIEW 只核对被评测版本/哈希并写总结，零模型调用、不改源码。
 
-每个独立任务最多 10 次正式 POST 尝试、默认 1 CNY；YAML `max_cost_cny` 或 CLI `--max-cost-cny 2` 可调高/调低。调用前按完整输入/输出上限预留费用，不退还预留，所以可能比实际成本更早停止。账单约束依赖价格/Provider 上限准确有效；缺 CNY 价格/请求上限、缺 usage 或 usage 超上限即停止。额外 80 次 LLM 熔断防止无限循环；墙钟上限可选。
+每个独立任务最多 10 次正式 POST 尝试、默认 1 CNY；YAML `max_cost_cny` 或 CLI `--max-cost-cny 2` 可调高/调低。新任务调用前按完整输入/输出上限预留费用，收到可信 usage 后按配置单价结算实际输入/输出 token，释放未使用的差额；`budget_committed_cny` 表示已结算费用加尚未确认的预留，单题和整场预算均使用此值。Trace 的 `BUDGET_SETTLEMENT` 保留预留、结算、释放与调用关联。未知/中断/超上限用量保留预留并停止，不按免费处理；旧冻结检查点保留原有累计预留策略，不回写历史结果。配置单价估算不等于账单，尚不自动计入缓存折扣、限时优惠或免费额度。账单约束依赖价格/Provider 上限准确有效；缺 CNY 价格/请求上限、缺 usage 或 usage 超上限即停止。额外 80 次 LLM 熔断防止无限循环；墙钟上限可选。
+
+新 Harness 任务在 CODE/DEBUG 无法提取完整 C++20 代码时，沿用原 Role/Profile 要求模型纠正输出格式；`config/harness.yaml` 的 `max_code_extraction_retries` 默认 `3`，即首次生成后最多额外重试 3 次（`0` 禁用）。每个新候选独立计数；每次纠正计入 LLM 次数和费用预留，仍受输入/费用/时间上限约束。失败输出不执行、不提交，Trace 记录 `CODE_EXTRACTION_RETRY`；用尽次数仍以 `invalid_model_output / code_extraction_failed` 结束。该重试只处理已收到的无效代码输出，不重发未知请求，也不重试模型传输错误。code-only 和独立 checker 生成保持原有次数；旧检查点不自动增加重试，已 DONE 任务不会重跑。
 
 `checkpoint.json` 原子保留单题 Context、进度、计数、响应与实际配置，`state.json` 是投影；题面/计划/源码完整保留，最新反馈提示最多 8000 字符、历史最近 5 条，超长输入不静默截代码。恢复要求模型/价格/上限、预算及 OJ endpoint 与检查点一致，且单任务互斥。已知提交 ID 继续查询，已保存模型响应复用；中断后模型请求或提交 POST 是否生效未知时停止为 `result_unknown`，不盲目重发。正式评测轮询超时且 ID 已知时可 `resume`；一般 DONE 重读结果不再调用。
 
@@ -168,7 +170,7 @@ uv run codeharness-experiment resume config/experiment.smoke.yaml \
   --confirm-model-call --confirm-submit
 ```
 
-各策略/重复是独立任务，各自最多 10 次正式 POST、默认 1 元，不再共享同题的 1 元额度；整批仍受显式 `total_cost_cny` 约束。实验 CLI `--max-cost-cny` 仅调整单任务，不自动提高整批 cap。code-only 仍只有一次 CODE、不跑样例；失败/未知调用预留不退还，Provider usage 超上限整批停止且拒绝恢复。
+各策略/重复是独立任务，各自最多 10 次正式 POST、默认 1 元，不再共享同题的 1 元额度；整批仍受显式 `total_cost_cny` 约束。实验 CLI `--max-cost-cny` 仅调整单任务，不自动提高整批 cap。code-only 仍只有一次 CODE、不跑样例；用量已知的调用按实际 token 结算（包含已返回用量的失败调用），未知调用保留预留，Provider usage 超上限整批停止且拒绝恢复。
 
 报告位于 `workspace/.experiments/<实验-id>/`：`manifest.json` 保存配置、实际模型/Role/价格/参数/endpoint 指纹及任务意图；`tasks.json/csv`、`summary.json/csv` 保存逐任务和分组指标、未知状态与 Trace 对账。完成实验的 resume 仅重建报告，不再次调用 API。中断 harness 用已有检查点/提交 ID；中断 code-only 不自动重新生成。
 
@@ -200,11 +202,11 @@ uv run codeharness-experiment contest-resume 1 --experiment-id contest-1-run-001
 
 报告保存于 `workspace/.contests/<运行-id>/`（`contest.json`、`report.json`、`problems.csv`）；底层批次及单题 Trace/检查点继续使用现有 `.experiments` 和单题目录。恢复固定题单与配置，已完成运行不再调用 API，未知模型请求/POST 不补发；未公开或页面协议变化时付费前阻断，公开后用新运行 ID。`--max-cost-cny`/`--max-llm-calls`/`--max-submissions` 可限制逐题额度/次数；code-only 仍一次 CODE、至多一次提交、不跑样例。
 
-2026-10-02 比赛 `1` 小规模实测：固定 standard、harness-loop，每题 0.35 元/最多 6 次模型、整场 cap=0.7 元。B（CF1454B）提交 `103` 为 AC，A（CF1454A）样例文本不匹配后 DEBUG 无完整代码，未正式提交；汇总 **1/2 AC、5 次模型、1 次正式提交、估算 0.0255813 元**，非供应商账单。A 是多解题，另一合法排列被现有 token 比较拒绝；该历史结果保留；新任务采用显式 checker 策略与正向 LLM checker 门禁，不把旧 A 补判 AC。
+2026-10-02 比赛 `1` 小规模实测：固定 standard、harness-loop，每题 0.35 元/最多 6 次模型、整场 cap=0.7 元。B（CF1454B）提交 `103` 为 AC，A（CF1454A）样例文本不匹配后 DEBUG 无完整代码，未正式提交；汇总 **1/2 AC、5 次模型、1 次正式提交、估算 0.0255813 元**，非供应商账单。A 是多解题，另一合法排列被现有 token 比较拒绝；该历史结果保留；新 v3 任务采用可信语义检查或 execution-only→正式 Judge，不把旧 A 补判 AC。
 
 ## Checker、Recovery 与离线实验准备
 
-`config/checker.example.yaml` 说明冻结策略；Agent/Dashboard 可使用服务器端 `--sample-config`，Experiment YAML 使用 `sample_checking`。默认 LLM checker 复用 CODE Profile，受同一调用/费用额度约束，保存独立 purpose/hash/源码并在单题复用。其 MiniOJ Custom Run 单独统计并计入总数。正向认可仍记 `sample_check_unverifiable`，拒绝/未知不要求算法修复。详见 [checker policy](docs/checker-policy.md)。
+`config/checker.example.yaml` 保留明确的旧 v1 实验性门禁；新默认 `sample_check_v3` / LLM checker disabled / execution_only。可信 exact/token/双显式容差 float 保持样例语义检查；special/unknown 已知 Custom Run OK + exit=0 记 output_unverifiable / passed=null，交正式 Judge 判定，运行失败与正式 WA 的 DEBUG 原因分开。Main 三个 Harness 策略一致且不生成 checker；旧 v1/v2 checkpoint 不升级。生成/独立 smoke 保留实验用途，执行仅经过 MiniOJ HTTP。详见 [checker policy](docs/checker-policy.md)。
 
 State/result、JSON/CSV 与详情页增加 first_try_ac、recovered_to_ac、sample/formal recovery 分类和 DEBUG/重 PLAN/候选/拒绝/无法验证计数。正式修复链必须有关联的程序失败 → 成功 DEBUG → 后续候选 → 正式 AC → REVIEW；基础设施错误与 LLM checker 拒绝不计算法修复。历史工件只读、不回写。
 

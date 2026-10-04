@@ -4,7 +4,7 @@ import json
 import httpx
 import pytest
 
-from agent.core.checker import CheckerSpec, SampleGatePolicy, checker
+from agent.core.checker import CheckerSpec, SampleGatePolicy as GatePolicy, checker
 from agent.core.generated_checker import checker_stdin, generated_decision
 from agent.core.harness import HarnessLoop, HarnessPolicy
 from agent.core.agent import CodingAgent
@@ -14,7 +14,19 @@ from agent.oj_client.client import OJClient
 from agent.oj_client.types import CustomRunResult, ProblemSample
 from agent.tools.runtime import build_default_tools
 from agent.workspace.task import TaskWorkspace
-from client_tests.test_phase4_harness import OJ, Router, GOOD, BAD, make_agent, events, roles, good_variant
+from client_tests.test_phase4_harness import OJ, Router, GOOD, BAD, make_agent as base_make_agent, events, roles, good_variant
+
+
+def SampleGatePolicy(**kwargs):
+    """These regressions exercise the explicitly frozen v2 contract."""
+    return GatePolicy(**{"version": "sample_check_v2", **kwargs})
+
+
+def make_agent(*args, **kwargs):
+    agent, workspace, oj = base_make_agent(*args, **kwargs)
+    if kwargs.get("workspace") is None:
+        agent.sample_checking = SampleGatePolicy()
+    return agent, workspace, oj
 
 
 @pytest.mark.parametrize('kind,expected,actual,passed', [
@@ -146,7 +158,7 @@ def test_llm_generated_checker_is_budgeted_remote_and_explicitly_unverified(tmp_
     assert events(w,'LLM_CALL')[-1]['payload']['purpose']=='sample_checker_generation'
     assert 'Current C++20 solution:' not in events(w,'LLM_CALL')[-1]['payload']['messages'][-1]['content']
     assert w.state.debug_iterations==0 and not w.state.recovery_metrics['recovered_to_ac']
-    assert (w.root/'artifacts/checkers/checker-v1.cpp').is_file()
+    assert (w.root/'artifacts/checkers/checker-v2.cpp').is_file()
     metrics=w.state.recovery_metrics
     assert metrics['llm_checker_call_count']==1 and metrics['checker_custom_run_count']==2
     assert metrics['contestant_custom_run_count']==1
@@ -162,7 +174,7 @@ def test_llm_generated_checker_is_budgeted_remote_and_explicitly_unverified(tmp_
 def test_checker_rejecting_reference_cannot_approve_alternative_or_trigger_debug(tmp_path):
     agent,w,oj=make_agent(tmp_path,Router(['plan',GOOD,CHECKER]),ConstructionOJ(checker_replies=[False]))
     agent.sample_checking=SampleGatePolicy(llm_checker='submit_on_pass')
-    assert agent.run_harness_loop().terminal_status=='sample_check_unverifiable'
+    assert agent.run_harness_loop().terminal_status=='checker_sanity_failed'
     assert w.state.debug_iterations==0 and oj.run_calls==2 and not oj.submissions
 
 
@@ -191,7 +203,7 @@ def test_generated_checker_uncertain_call_is_not_reissued(tmp_path):
     resumed,w2,_=make_agent(tmp_path,router,oj,workspace=restored)
     resumed.sample_checking=SampleGatePolicy(llm_checker='submit_on_pass')
     result=resumed.run_harness_loop(resume=True)
-    assert result.terminal_status=='result_unknown' and len(router.calls)==3 and oj.run_calls==1
+    assert result.terminal_status=='checker_result_unknown' and len(router.calls)==3 and oj.run_calls==1
     assert not oj.submissions
 
 
@@ -213,7 +225,7 @@ def test_default_generated_checker_positive_gate_and_remote_run_uncertainty(tmp_
     router=Router(['plan',GOOD,CHECKER]);agent,w,oj=make_agent(tmp_path,router,InterruptedChecker())
     with pytest.raises(KeyboardInterrupt):agent.run_harness_loop()
     calls=len(router.calls)
-    assert agent.run_harness_loop(resume=True).terminal_status=='result_unknown'
+    assert agent.run_harness_loop(resume=True).terminal_status=='checker_result_unknown'
     assert len(router.calls)==calls and not oj.submissions
     assert w.state.debug_iterations==0
 

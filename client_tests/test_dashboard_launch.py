@@ -474,7 +474,7 @@ def test_selected_task_limits_stop_at_the_runtime_not_just_the_form(launch_web, 
 
 @pytest.mark.parametrize("config", [None, [], "bad", {"max_tokens": 1000}, {"debug_before_replan": 1},
     {"feedback_mode": None}, {"model_config": "/etc/passwd"}, {"max_llm_calls": True},
-    {"max_llm_calls": 1.5}, {"max_llm_calls": 0}, {"max_submissions": 11}, {"max_submissions": "2"},
+    {"max_llm_calls": 1.5}, {"max_llm_calls": 0}, {"max_submissions": 101}, {"max_submissions": "2"},
     {"max_cost_cny": False}, {"http_timeout": 0}, {"http_timeout": float("nan")},
     {"http_timeout": 10 ** 400}, {"poll_interval": -1}, {"poll_interval": None},
     {"deadline": True}, {"deadline": float("inf")}, {"deadline": "120"}])

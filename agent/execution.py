@@ -15,6 +15,7 @@ from agent.core.checker import SampleGatePolicy
 from agent.core.harness import HarnessPolicy
 from agent.core.policy import ModelPolicy
 from agent.core.formal_dedup import FORMAL_DEDUP_POLICY
+from agent.core.budget import MODEL_BUDGET_ACCOUNTING
 from agent.models.registry import ModelRegistry
 from agent.models.router import ModelRouter
 from agent.models.types import AgentRole, ModelProfile
@@ -109,6 +110,7 @@ class ExecutionService:
             if hasattr(provider, "transport_metadata"):
                 routes[role.value]["provider_transport"] = provider.transport_metadata
         snapshot = {"schema_version": "phase5-v1", "mode": request.mode, "routes": routes,
+            "model_budget_accounting": MODEL_BUDGET_ACCOUNTING,
             "role_mapping": {r.value: p.value for r, p in policy.mapping.items()},
             "model_escalation": False, "test_generation": False,
             "sample_policy": "disabled" if request.mode == "code-only" else "all_public_whitespace_tokens",
@@ -130,7 +132,7 @@ class ExecutionService:
         if request.sample_checking is not None:
             snapshot["sample_checking"] = request.sample_checking
             if request.mode == "harness-loop":
-                snapshot["sample_policy"] = "sample_check_v1"
+                snapshot["sample_policy"] = request.sample_checking["version"]
             snapshot["model_configuration_evidence"] = {
                 role: {**model_evidence(self.router.route(policy.mapping[AgentRole(role)])),
                        "endpoint_fingerprint": route["provider_endpoint_sha256"]}

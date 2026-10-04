@@ -3,6 +3,9 @@
 max_submissions: 10
 max_cost_cny: 1.0
 debug_before_replan: 3
+# Additional format-correction calls after CODE/DEBUG cannot yield C++20 code.
+# 3 means one initial response plus at most three retries; 0 disables retries.
+max_code_extraction_retries: 3
 # Finite backstop when only public samples fail, or a route has zero pricing.
 max_llm_calls: 80
 # Optional cumulative active-runtime limit, persisted across resume.

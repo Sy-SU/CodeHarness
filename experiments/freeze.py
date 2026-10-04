@@ -6,14 +6,15 @@ import inspect
 import subprocess
 from pathlib import Path
 
-from agent.core.checker import SAMPLE_POLICY
+from agent.core.checker import SAMPLE_POLICY, GENERATED_SAMPLE_POLICY
 from agent.core.formal_dedup import FORMAL_DEDUP_POLICY
 from agent.core.context import ContextBuilder
-from agent.core.generated_checker import INSTRUCTIONS, checker_messages
+from agent.core.generated_checker import CHECKER_PROMPT_VERSION, INSTRUCTIONS, checker_messages
 from agent.execution import fingerprint
 from agent.models.types import AgentRole
 from agent.oj_client.feedback import VERDICT_ONLY_POLICY
 from .order import execution_order
+from .config import MAIN_RECEIPT_POLICY, requires_main_receipt
 
 
 def file_hash(path):
@@ -53,7 +54,7 @@ def prompt_snapshot():
             recent_history=["{recent_history}"])
         templates[role.value] = {"version": "context_v1", "messages": [
             {"role": message.role, "content": message.content} for message in messages]}
-    templates["sample_checker_generation"] = {"version": "llm_checker_prompt_v1", "messages": [
+    templates["sample_checker_generation"] = {"version": CHECKER_PROMPT_VERSION, "messages": [
         {"role": message.role, "content": message.content} for message in checker_messages(builder, problem)]}
     prompts = [{"prompt_name": name, "prompt_version": value["version"],
                 "sha256": fingerprint({"template": value, "assembly": assembly}), **value}
@@ -115,7 +116,7 @@ def frozen_fingerprint(config, models, condition_routes, oj_endpoint, *, config_
         "prompt_bundle_hash": prompts["prompt_bundle_hash"],
         "runtime_source_hash": runtime_source_hash(),
         "formal_submission_dedup_policy": dict(FORMAL_DEDUP_POLICY),
-        "checker_policy_version": SAMPLE_POLICY,
+        "checker_policy_version": (config.sample_checking or {}).get("version", SAMPLE_POLICY),
         "checker_policy_hash": fingerprint(config.sample_checking),
         "feedback_policy_version": VERDICT_ONLY_POLICY if config.expected_feedback_mode == "verdict_only" else "full_native_v1",
         "feedback_policy_hash": fingerprint([config.expected_feedback_mode, config.require_feedback_mode, VERDICT_ONLY_POLICY]),
@@ -123,5 +124,15 @@ def frozen_fingerprint(config, models, condition_routes, oj_endpoint, *, config_
         "execution_order_hash": order["execution_order_hash"],
         "oj_endpoint_fingerprint": fingerprint(oj_endpoint),
         "provider_endpoint_fingerprint": {model["profile"]: model["endpoint_fingerprint"] for model in models}}
+    if requires_main_receipt(config):
+        components["main_receipt_policy_version"] = MAIN_RECEIPT_POLICY
+    if components["checker_policy_version"] in {GENERATED_SAMPLE_POLICY, SAMPLE_POLICY}:
+        from .checker_smoke import checker_implementation
+        from agent.core.generated_checker import CHECKER_CONTRACT_VERSION
+        components["checker_implementation_hash"] = checker_implementation()["sha256"]
+        components["checker_contract_version"] = "semantic_or_execution_only_v3" if components["checker_policy_version"] == SAMPLE_POLICY else CHECKER_CONTRACT_VERSION
+        components["checker_prompt_version"] = CHECKER_PROMPT_VERSION
+        if components["checker_policy_version"] == SAMPLE_POLICY:
+            components["checker_generation_in_critical_path"] = False
     return {"schema_version": "experiment_fingerprint_v1", "components": components,
             "sha256": fingerprint(components)}

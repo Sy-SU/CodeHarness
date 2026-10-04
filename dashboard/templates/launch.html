@@ -14,7 +14,7 @@
     <div class="config-fields">
       <label>{{ t('Task budget (CNY)') }}<input name="max_cost_cny" type="number" min="0.000001" step="any" value="{{ default_config.max_cost_cny }}" required></label>
       <label>{{ t('Maximum model calls') }}<input name="max_llm_calls" type="number" min="1" step="1" value="{{ default_config.max_llm_calls }}" required></label>
-      <label>{{ t('Maximum submission attempts') }}<input name="max_submissions" type="number" min="1" max="10" step="1" value="{{ default_config.max_submissions }}" required></label>
+      <label>{{ t('Maximum submission attempts') }}<input name="max_submissions" type="number" min="1" max="100" step="1" value="{{ default_config.max_submissions }}" required></label>
       <label>{{ t('MiniOJ HTTP timeout (s)') }}<input name="http_timeout" type="number" min="0.000001" step="any" value="{{ default_config.http_timeout }}" required></label>
       <label>{{ t('Judge polling interval (s)') }}<input name="poll_interval" type="number" min="0" step="any" value="{{ default_config.poll_interval }}" required></label>
       <label>{{ t('Judge wait deadline (s)') }}<input name="deadline" type="number" min="0" step="any" value="{{ default_config.deadline }}" required></label>

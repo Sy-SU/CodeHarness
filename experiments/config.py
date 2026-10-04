@@ -14,6 +14,12 @@ from agent.execution import RunRequest
 from agent.core.checker import SampleGatePolicy
 
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,49}$")
+MAIN_RECEIPT_POLICY = "main_final_receipt_v1"
+
+
+def requires_main_receipt(config):
+    """The agreed 12 x 5 main layout cannot launch with a generic preflight."""
+    return len(config.problems) == 12 and len(config.strategies) == 5 and config.task_count == 60
 
 
 @dataclass(frozen=True)

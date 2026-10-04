@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import List
 
 from .registry import ModelDefinition, ModelRegistry
@@ -69,11 +70,11 @@ class ModelRouter:
                 reason="missing_pricing",
             )
         amount = (
-            response.usage.input_tokens * definition.input_cost_per_million
-            + response.usage.output_tokens * definition.output_cost_per_million
-        ) / 1_000_000
+            response.usage.input_tokens * Decimal(str(definition.input_cost_per_million))
+            + response.usage.output_tokens * Decimal(str(definition.output_cost_per_million))
+        ) / Decimal(1_000_000)
         return CostEstimate(
-            amount=amount,
+            amount=float(amount),
             currency=definition.currency,
             known=True,
         )

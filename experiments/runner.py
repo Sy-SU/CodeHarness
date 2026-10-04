@@ -8,8 +8,8 @@ from pathlib import Path
 from agent.core.harness import HarnessPolicy
 from agent.execution import RunRequest, fingerprint
 from agent.workspace.task import TaskState, TaskWorkspace
-from .config import ExperimentConfig, IDENTIFIER
-from .results import csv_text, summarize_rows, task_row
+from .config import ExperimentConfig, IDENTIFIER, requires_main_receipt
+from .results import csv_text, summarize_rows, summarize_subsets, task_row
 from .preflight import PreflightError
 
 
@@ -63,6 +63,9 @@ class ExperimentRunner:
         summaries = summarize_rows(rows)
         store.write_json("summary.json", summaries)
         store.write_text("summary.csv", csv_text(summaries))
+        if manifest.get("main_final_receipt"):
+            subsets = summarize_subsets(rows)
+            store.write_json("pilot-subsets.json", subsets)
         if self.on_export:
             self.on_export(manifest)
 
@@ -83,6 +86,14 @@ class ExperimentRunner:
             from .preflight import check_frozen_preflight
             preflight = check_frozen_preflight(config, self.service, preflight_id,
                 expected_report_hash=(saved or {}).get("preflight_report_hash"))
+        receipt = None
+        if requires_main_receipt(config):
+            if not preflight:
+                raise PreflightError("This main experiment requires a final receipt and --preflight-id")
+            from .main_preflight import check_main_receipt
+            receipt = check_main_receipt(preflight, self.service.workspace_root, experiment_id)
+            if saved and saved.get("main_final_receipt") != receipt:
+                raise PreflightError("Main final receipt differs from the saved experiment")
         store = self._store(experiment_id, create=not resume)
         with store.exclusive_run():
             conditions = self._conditions(config)
@@ -114,6 +125,8 @@ class ExperimentRunner:
                     manifest.update(preflight_id=preflight_id,
                         preflight_report_hash=preflight["preflight_report_hash"],
                         experiment_fingerprint=preflight["fingerprint"], execution=preflight["execution"])
+                    if receipt:
+                        manifest["main_final_receipt"] = receipt
                     planned = {(row["problem_id"], row["strategy"], row["repetition"]): row for row in manifest["tasks"]}
                     checkers = {row["problem_id"]: row for row in preflight["checker_summary"]["problems"]}
                     manifest["tasks"] = [planned[(item["problem_id"], item["condition"], item["repetition"])]
@@ -122,6 +135,7 @@ class ExperimentRunner:
                         checker = checkers[row["problem_id"]]
                         row.update({key: checker[key] for key in ("checker_type", "checker_source", "checker_policy", "checker_stratum")})
                         row["expected_checker_type"] = checker["effective_checker_type"]
+                        row.update({key: checker.get(key) for key in ("pilot_seen", "pilot_run_id", "checker_verification_class")})
                 self._export(store, manifest)
             manifest["status"] = "running"
             strategies = {strategy.name: strategy for strategy in config.strategies}
@@ -131,8 +145,11 @@ class ExperimentRunner:
                         continue
                     if preflight:
                         # Files, prompts and dirty diff must stay frozen between tasks.
-                        check_frozen_preflight(config, self.service, preflight_id,
+                        current_preflight = check_frozen_preflight(config, self.service, preflight_id,
                             expected_report_hash=manifest["preflight_report_hash"])
+                        if receipt:
+                            if check_main_receipt(current_preflight, self.service.workspace_root, experiment_id) != receipt:
+                                raise PreflightError("Main final receipt drift")
                         with self.service.client_factory(self.service.settings.oj_base_url,
                                 self.service.settings.oj_api_token, timeout_seconds=config.http_timeout) as client:
                             observation = client.get_feedback_mode()

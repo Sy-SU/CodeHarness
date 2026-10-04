@@ -5,9 +5,12 @@ import math
 from dataclasses import asdict, dataclass, field
 from typing import Optional
 
-SAMPLE_POLICY = "sample_check_v1"
+LEGACY_SAMPLE_POLICY = "sample_check_v1"
+GENERATED_SAMPLE_POLICY = "sample_check_v2"
+SAMPLE_POLICY = "sample_check_v3"
 KINDS = {"exact", "token", "float", "special", "unknown"}
 PROGRAM_FAILURES = {"WA", "CE", "RE", "TLE", "MLE", "OLE"}
+EXECUTION_FAILURES = {"CE", "RE", "TLE", "MLE", "OLE"}
 
 
 @dataclass(frozen=True)
@@ -56,13 +59,24 @@ class SampleGatePolicy:
     version: str = SAMPLE_POLICY
     on_unverifiable: str = "stop"
     overrides: dict = field(default_factory=dict)
-    llm_checker: str = "submit_on_pass"
+    llm_checker: Optional[str] = None
+    unverifiable_output: Optional[str] = None
 
     def __post_init__(self):
-        if self.version != SAMPLE_POLICY or self.on_unverifiable not in {"stop", "submit"}:
+        if self.version not in {LEGACY_SAMPLE_POLICY, GENERATED_SAMPLE_POLICY, SAMPLE_POLICY} or self.on_unverifiable not in {"stop", "submit"}:
             raise ValueError("Unsupported sample gate policy")
+        if self.llm_checker is None:
+            object.__setattr__(self, "llm_checker", "disabled" if self.version == SAMPLE_POLICY else "submit_on_pass")
         if self.llm_checker not in {"disabled", "advisory", "submit_on_pass"}:
             raise ValueError("Invalid LLM checker policy")
+        if self.version == SAMPLE_POLICY:
+            if self.unverifiable_output is None:
+                object.__setattr__(self, "unverifiable_output", "execution_only")
+            if (self.unverifiable_output != "execution_only" or self.on_unverifiable != "stop"
+                    or self.llm_checker == "submit_on_pass"):
+                raise ValueError("v3 requires execution-only fallback and fail-closed unknown results")
+        elif self.unverifiable_output is not None:
+            raise ValueError("Legacy sample policies cannot acquire execution-only fallback")
         if not isinstance(self.overrides, dict) or len(self.overrides) > 1000:
             raise ValueError("Invalid sample checker overrides")
         for problem_id, spec in self.overrides.items():
@@ -77,7 +91,39 @@ class SampleGatePolicy:
         return cls(**value)
 
     def as_dict(self):
-        return asdict(self)
+        value = asdict(self)
+        if self.unverifiable_output is None:
+            value.pop("unverifiable_output")
+        return value
+
+
+def sample_mode(spec, policy, *, remote_verified=False):
+    """Select by checker trust, independently of the condition's model profile."""
+    trusted = checker_dimensions(spec, remote_verified=remote_verified)["checker_verification"] in {
+        "client_verified", "remote_verified"}
+    return "execution_only" if policy and policy.version == SAMPLE_POLICY and not trusted else "semantic_check"
+
+
+def check_execution(result):
+    """Execution evidence says nothing about stdout's semantic correctness."""
+    if result.status in EXECUTION_FAILURES:
+        return SampleCheck("sample_execution_failure", False, "sample_execution_failure", result.status)
+    if result.status != "OK":
+        return unverifiable("execution_status_unknown")
+    if not isinstance(result.exit_code, int) or isinstance(result.exit_code, bool):
+        return unverifiable("execution_exit_code_unknown")
+    if result.exit_code != 0:
+        return SampleCheck("sample_execution_failure", False, "sample_execution_failure", "RE")
+    return SampleCheck("execution_pass_output_unverifiable", None, "output_unverifiable")
+
+
+def checker_dimensions(spec, *, source="problem_metadata", generated=False, remote_verified=False):
+    """Kind is a problem property; provenance and trust are independent."""
+    trusted = spec.kind in {"exact", "token"} or (spec.kind == "float"
+        and spec.absolute_tolerance is not None and spec.relative_tolerance is not None)
+    return {"checker_kind": spec.kind, "checker_source": "llm_generated" if generated else source,
+            "checker_verification": "llm_generated_unverified" if generated else
+                "remote_verified" if remote_verified else "client_verified" if trusted else "unverifiable"}
 
 
 @dataclass(frozen=True)

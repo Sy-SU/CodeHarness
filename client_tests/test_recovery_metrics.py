@@ -64,7 +64,7 @@ def test_infrastructure_failures_do_not_earn_algorithm_recovery(tmp_path,failure
 
 def test_no_submission_never_is_first_try_ac_and_invalid_output_is_counted(tmp_path):
     agent,w,_=make_agent(tmp_path,Router(['plan','not complete code']))
-    assert agent.run_harness_loop().terminal_status=='invalid_model_output'
+    assert agent.run_harness_loop(harness_policy=HarnessPolicy(max_code_extraction_retries=0)).terminal_status=='invalid_model_output'
     m=w.state.recovery_metrics
     assert m['first_try_ac'] is False and m['invalid_model_output_count']==1 and m['candidate_version_count']==0
 

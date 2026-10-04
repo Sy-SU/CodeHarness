@@ -12,6 +12,16 @@ from agent.oj_client.feedback import VERDICT_ONLY_POLICY, compatible_feedback
 from agent.core.metrics import workspace_metrics, trace_events
 
 
+def cached_usage(response):
+    metadata = response.get("usage_metadata") or {}
+    details = metadata.get("prompt_tokens_details") or {}
+    value = details.get("cached_tokens") if isinstance(details, dict) else None
+    if (isinstance(value, int) and not isinstance(value, bool) and value >= 0
+            and response.get("usage") and value <= response["usage"]["input_tokens"]):
+        return value
+    return None
+
+
 def audit_trace(workspace, state):
     warnings, events = [], []
     for line in workspace.read_text("events.jsonl").splitlines():
@@ -44,6 +54,7 @@ def audit_trace(workspace, state):
     if dict(Counter(p.get("profile") for p in calls)) != state.get("calls_per_model_profile", {}):
         warnings.append("profile_call_counts_mismatch")
     reserved = sum(e["payload"].get("reserved_cny", 0) for e in events if e.get("type") == "BUDGET_RESERVATION")
+    reserved -= sum(e["payload"].get("released_cny", 0) for e in events if e.get("type") == "BUDGET_SETTLEMENT")
     if not math.isclose(reserved, state.get("budget_committed_cny", 0), abs_tol=1e-9):
         warnings.append("budget_reservations_mismatch")
     if not state.get("terminal_status") or len(responses) != len(calls):
@@ -101,6 +112,9 @@ def task_row(workspace, planned):
     row.update({key: value for key, value in metrics.items() if key not in {"schema_version", "recovery_evidence"}})
     row.update(recovery_metrics=metrics, sample_checker=state.get("sample_checker"),
                sample_gate_status=state.get("sample_gate_status"),
+               checker_schema_version=state.get("checker_schema_version"),
+               checker_observation=state.get("checker_observation"),
+               sample_check_status=state.get("sample_check_status"),
                official_performance=None, official_performance_status="not_applicable_task_level",
                estimated_cost_cny=row["estimated_cost"] if row["cost_currency"] == "CNY" else None)
     if (workspace.root / "artifacts/execution-config.json").is_file():
@@ -118,6 +132,19 @@ def task_row(workspace, planned):
     row["condition"] = row["strategy"]
     row["custom_runs"] = metrics["custom_run_count"]
     row["formal_submissions"] = metrics["formal_submission_count"]
+    row.setdefault("pilot_seen", None)  # history without this evidence is not labeled unseen
+    row.setdefault("pilot_run_id", None)
+    row.setdefault("checker_verification_class", "unverifiable")
+    row["sample_recovery_to_ac"] = metrics["recovered_after_sample_failure"]
+    row["duplicate_candidates"] = metrics["duplicate_candidate_count"]
+    row["reused_results"] = metrics["formal_result_reuse_count"]
+    row["provider_reported_cost"] = row["billed_cost"] = None
+    row["task_final_outcome"] = (row["final_verdict"] if row["terminal_status"] in {"accepted", "user_program_failure"}
+                                  else row["terminal_status"])
+    links = ("submission_id", "status", "verdict", "solution_version", "code_sha256", "model_call_id")
+    row["all_formal_verdict_observations"] = [{key: event["payload"].get(key) for key in links}
+        for event in events if event.get("type") == "JUDGE_RESULT"]
+    row["formal_observations_status"] = "incomplete_trace" if invalid else "trace_derived"
     terminated = [event["payload"] for event in events if event.get("type") == "TASK_TERMINATED"]
     row["wall_time"] = terminated[-1].get("wall_clock_seconds") if terminated else None
     row["wall_time_source"] = "Trace:TASK_TERMINATED" if row["wall_time"] is not None else "unavailable_historical_trace"
@@ -133,8 +160,23 @@ def task_row(workspace, planned):
         costs = [value.get("cost_estimate") or {} for value in responses]
         row["estimated_cost_cny"] = sum(value["amount"] for value in costs) if all(
             value.get("known") and value.get("currency") == "CNY" for value in costs) else None
+        cached = [cached_usage(response) for response in responses]
+        row["cached_tokens"] = sum(cached) if all(value is not None for value in cached) else None
     else:
         row["input_tokens"] = row["output_tokens"] = row["estimated_cost_cny"] = None
+        row["cached_tokens"] = None
+    row["cached_tokens_status"] = "observed" if row["cached_tokens"] is not None else "unknown"
+    row["model_output_metadata"] = []
+    for response in responses:
+        versions = [candidate["solution_version"] for candidate in metrics["candidate_versions"]
+                    if candidate.get("model_call_id") == response.get("correlation_id")]
+        extraction = ("candidate_created" if versions else "not_applicable" if response.get("role") == "PLAN"
+                      or response.get("purpose") == "sample_checker_generation" else "not_attempted"
+                      if response.get("status") != "succeeded" else "failed" if row["terminal_status"] == "invalid_model_output"
+                      and response is responses[-1] else "unrecorded")
+        row["model_output_metadata"].append({**{key: response.get(key) for key in (
+            "correlation_id", "role", "profile", "actual_response_model", "finish_reason", "usage_metadata")},
+            "candidate_versions": versions, "extraction_result": extraction})
     row["comparison_key"] = fingerprint({"strategy": row["strategy"],
         "configuration": row["configuration_fingerprint"], "actual_feedback_mode": observation,
         "effective_feedback_mode": effective, "feedback_policy": policy,
@@ -182,6 +224,10 @@ def summarize_rows(rows):
             "llm_failures": sum(t.get("llm_failures", 0) for t in tasks),
             "calls_per_model_profile": dict(profiles),
             "input_tokens": known_sum("input_tokens"), "output_tokens": known_sum("output_tokens"),
+            "cached_tokens": known_sum("cached_tokens"), "provider_reported_cost": None, "billed_cost": None,
+            "task_final_outcomes": dict(Counter(t.get("task_final_outcome") or "not_started" for t in tasks)),
+            "all_formal_verdicts": dict(Counter(observation.get("verdict") or "unknown" for task in tasks
+                for observation in task.get("all_formal_verdict_observations", []))),
             "unknown_usage_tasks": sum(t.get("input_tokens") is None or t.get("output_tokens") is None for t in tasks),
             "usage_missing_count": sum(t.get("usage_missing_count", 0) for t in tasks),
             "uncertain_llm_calls": sum(t.get("uncertain_llm_calls", 0) for t in tasks),
@@ -196,17 +242,32 @@ def summarize_rows(rows):
             "cost_currency": tasks[0].get("cost_currency"),
             "unknown_cost_tasks": sum(c is None for c in costs)})
         for metric in ("first_try_ac", "recovered_to_ac", "recovered_after_sample_failure",
-                       "recovered_after_formal_failure", "formal_recovery_to_ac"):
+                       "recovered_after_formal_failure", "formal_recovery_to_ac", "sample_execution_recovery"):
             result[-1][metric + "_count"] = sum(t.get(metric) is True for t in tasks)
             result[-1][metric + "_unknown_count"] = sum(t.get(metric) is None for t in tasks)
         for metric in ("successful_debug_count", "sample_gate_reject_count", "sample_check_unverifiable_count",
+                       "sample_semantic_verified_count", "sample_output_unverifiable_count", "sample_execution_failure_count",
+                       "formal_submit_after_unverifiable_sample_count",
                        "invalid_model_output_count", "formal_submission_count", "candidate_version_count",
-                       "duplicate_candidate_count", "formal_result_reuse_count"):
+                       "duplicate_candidate_count", "formal_result_reuse_count", "llm_checker_generation_count",
+                       "llm_checker_generation_failure_count", "llm_checker_sanity_pass_count", "llm_checker_sanity_failure_count",
+                       "llm_checker_candidate_pass_count", "llm_checker_candidate_reject_count", "llm_checker_execution_failure_count",
+                       "unverified_checker_stop_count"):
             result[-1][metric] = known_sum(metric)
         result[-1]["recovery_types"] = dict(Counter(kind for t in tasks for kind in t.get("recovery_type", [])))
         result[-1]["official_performance"] = None
         result[-1]["official_performance_status"] = "not_applicable_task_level"
     return result
+
+
+def summarize_subsets(rows):
+    """Descriptive subsets retain the existing condition/feedback/checker grouping."""
+    subsets = {"all_problems": rows, "pilot_seen": [row for row in rows if row.get("pilot_seen") is True],
+               "pilot_unseen": [row for row in rows if row.get("pilot_seen") is False]}
+    return {"schema_version": "pilot_subsets_v1", "unknown_pilot_seen_tasks": sum(
+        row.get("pilot_seen") is None for row in rows), "subsets": {key: {
+            "task_count": len(tasks), "problem_ids": sorted({row["problem_id"] for row in tasks}),
+            "conditions": summarize_rows(tasks)} for key, tasks in subsets.items()}}
 
 
 def csv_text(rows):

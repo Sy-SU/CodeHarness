@@ -152,7 +152,7 @@ def test_batch_two_modes_json_csv_audit_and_idempotent_resume(tmp_path):
 
 
 def test_global_reservations_stop_later_calls(tmp_path):
-    executor, provider, oj = service(tmp_path)
+    executor, provider, oj = service(tmp_path, provider=Provider(usage=TokenUsage(32000, 4096)))
     manifest = ExperimentRunner(executor).run(config(total_cost_cny=0.04), "budget")
     assert len(provider.calls) == 1 and len(oj.submissions) == 1
     assert manifest["tasks"][1]["terminal_status"] == "budget_exhausted"

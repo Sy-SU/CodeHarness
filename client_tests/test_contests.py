@@ -11,6 +11,7 @@ import pytest
 
 from agent.core.harness import HarnessPolicy
 from agent.execution import ExecutionService, RunRequest
+from agent.models.types import TokenUsage
 from agent.oj_client.client import OJClient, OJProtocolError, OJResultUnknownError
 from agent.oj_client.contests import ContestProblem, ContestSnapshot
 from experiments.contest import ContestRequest, ContestRunner, read_report, list_reports
@@ -220,7 +221,7 @@ def test_code_only_contest_keeps_one_call_one_submit_and_no_samples(tmp_path):
 
 
 def test_total_and_per_problem_caps_apply_and_skips_are_distinct(tmp_path):
-    executor, provider, oj = service(tmp_path, oj=ContestOJ())
+    executor, provider, oj = service(tmp_path, provider=Provider(usage=TokenUsage(32000, 4096)), oj=ContestOJ())
     run = request(policy=HarnessPolicy(max_cost_cny=0.08))
     run = replace(run, total_cost_cny=0.08)
     report = ContestRunner(executor).run(run, "limited")
@@ -231,7 +232,7 @@ def test_total_and_per_problem_caps_apply_and_skips_are_distinct(tmp_path):
 
 
 def test_fully_used_total_cap_marks_unstarted_without_false_completion_or_broken_link(tmp_path):
-    executor, provider, oj = service(tmp_path, oj=ContestOJ())
+    executor, provider, oj = service(tmp_path, provider=Provider(usage=TokenUsage(32000, 4096)), oj=ContestOJ())
     run = replace(request(mode="code-only", policy=HarnessPolicy(max_llm_calls=1, max_submissions=1)),
                   total_cost_cny=0.036096)
     report = ContestRunner(executor).run(run, "skip-rest")
@@ -343,7 +344,7 @@ def test_dashboard_contest_queue_idempotency_progress_and_local_only_reads(web):
 @pytest.mark.parametrize("changes", [
     {"confirm_remote_calls": False}, {"contest_id": "../1"}, {"problems": ["other"]},
     {"model_config": "/etc/passwd"}, {"total_cost_cny": -1}, {"score_policy": "official"},
-    {"task_config": {"max_submissions": 11}}, {"task_config": {"roles": {"CODE": "max"}}},
+    {"task_config": {"max_submissions": 101}}, {"task_config": {"roles": {"CODE": "max"}}},
 ])
 def test_dashboard_contest_rejects_unsafe_or_unconfirmed_launch(web, changes):
     launcher, provider, oj, get, headers = web

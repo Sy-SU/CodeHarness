@@ -5,6 +5,11 @@ from decimal import Decimal
 from dataclasses import asdict
 from hashlib import sha256
 import json
+import math
+import uuid
+
+
+MODEL_BUDGET_ACCOUNTING = "actual_usage_settlement_v1"
 
 
 class BudgetStopped(RuntimeError):
@@ -13,7 +18,8 @@ class BudgetStopped(RuntimeError):
         self.status, self.reason = status, reason
 
 
-def reserve_model_cost(route, messages, state, max_cost_cny, *, audit=None, components=None):
+def reserve_model_cost(route, messages, state, max_cost_cny, *, audit=None, components=None,
+                       settle_actual=True):
     output_limit = route.parameters.get("max_tokens")
     input_limit = route.input_token_limit
     prompt_bound = sum(len(message.content.encode("utf-8")) + 1024 for message in messages)
@@ -29,6 +35,9 @@ def reserve_model_cost(route, messages, state, max_cost_cny, *, audit=None, comp
     def decision(status, reason=None, **extra):
         if audit:
             audit({**metadata, "decision": status, "reason": reason, **extra})
+    if settle_actual and state.pending_model_reservation is not None:
+        decision("rejected", "previous_model_usage_unresolved")
+        raise BudgetStopped("budget_unverifiable", "previous_model_usage_unresolved")
     if (not route.pricing_known or route.currency != "CNY"
             or isinstance(output_limit, bool) or not isinstance(output_limit, int) or output_limit <= 0
             or isinstance(input_limit, bool) or not isinstance(input_limit, int) or input_limit <= 0):
@@ -45,7 +54,49 @@ def reserve_model_cost(route, messages, state, max_cost_cny, *, audit=None, comp
         raise BudgetStopped("budget_exhausted", "cost_reservation_limit")
     decision("allowed", proposed_reservation_cny=float(bound), committed_after_cny=float(committed))
     state.budget_committed_cny = float(committed)
+    if settle_actual:
+        state.pending_model_reservation = {
+            "reservation_id": "budget_" + uuid.uuid4().hex,
+            "provider": route.provider, "model": route.model,
+            "input_limit": input_limit, "output_limit": output_limit,
+            "reserved_cny": float(bound), "model_call_id": None,
+        }
     return input_limit, output_limit, float(bound)
+
+
+def settle_model_cost(state, response, cost, call_id):
+    """Replace this call's ceiling with known usage cost; uncertainty stays reserved."""
+    reservation = state.pending_model_reservation
+    if reservation is None:
+        return None  # Historical tasks keep their frozen cumulative-ceiling policy.
+    bound = Decimal(str(reservation["reserved_cny"]))
+    reason = None
+    if (reservation["model_call_id"] != call_id
+            or response.provider != reservation["provider"]
+            or response.model != reservation["model"]):
+        reason = "reservation_route_mismatch"
+    elif response.usage is None:
+        reason = "model_usage_missing"
+    elif (response.usage.input_tokens > reservation["input_limit"]
+          or response.usage.output_tokens > reservation["output_limit"]):
+        reason = "provider_exceeded_configured_token_bound"
+    elif (not cost.known or cost.currency != "CNY" or cost.amount is None
+          or not math.isfinite(cost.amount) or cost.amount < 0):
+        reason = "actual_cost_unverifiable"
+    elif Decimal(str(cost.amount)) > bound:
+        reason = "actual_cost_exceeds_reservation"
+    released = Decimal(0)
+    if reason is None:
+        released = bound - Decimal(str(cost.amount))
+        state.budget_committed_cny = float(Decimal(str(state.budget_committed_cny)) - released)
+        state.pending_model_reservation = None
+    return {
+        "schema_version": MODEL_BUDGET_ACCOUNTING,
+        "reservation_id": reservation["reservation_id"], "model_call_id": call_id,
+        "reserved_cny": float(bound), "actual_cost_cny": cost.amount if reason is None else None,
+        "released_cny": float(released), "committed_cny": state.budget_committed_cny,
+        "status": "settled" if reason is None else "retained", "reason": reason,
+    }
 
 
 def validate_usage(response, input_limit, output_limit):

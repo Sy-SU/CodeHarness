@@ -8,6 +8,7 @@ from dataclasses import asdict
 from typing import List
 
 from agent.workspace.task import TaskWorkspace
+from agent.core.budget import BudgetStopped, settle_model_cost
 
 from .router import ModelRouter
 from .types import (
@@ -65,6 +66,13 @@ class ModelCallRuntime:
         route = self.router.route(profile)
         call_id = f"llm_{uuid.uuid4().hex}"
         state = self.workspace.state
+        reservation = state.pending_model_reservation
+        if reservation is not None:
+            if reservation["model_call_id"] is not None:
+                raise ValueError("An unresolved paid model call cannot be reissued")
+            if reservation["provider"] != route.provider or reservation["model"] != route.model:
+                raise ValueError("Model route differs from the reserved route")
+            reservation["model_call_id"] = call_id
         state.last_model_call_id = call_id
         state.current_model_profile = profile.value
         state.llm_call_count += 1
@@ -159,7 +167,13 @@ class ModelCallRuntime:
             },
             correlation_id=call_id,
         )
+        settlement = settle_model_cost(state, response, cost, call_id)
+        if settlement is not None:
+            self.workspace.trace.append("BUDGET_SETTLEMENT", settlement, correlation_id=call_id)
         self.workspace.save_state()
+        if (settlement is not None and settlement["status"] == "retained"
+                and (response.succeeded or settlement["reason"] != "model_usage_missing")):
+            raise BudgetStopped("budget_unverifiable", settlement["reason"])
         if not response.succeeded:
             raise ModelCallFailed(response)
         return response

@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import re
 
-from .checker import PROGRAM_FAILURES
+from .checker import PROGRAM_FAILURES, EXECUTION_FAILURES
 
 HASH = re.compile(r"[0-9a-f]{64}")
 
@@ -27,6 +27,7 @@ def recovery_metrics(events, state, *, invalid_lines=0):
     calls, responses, replans, invalid_outputs, custom_runs = {}, {}, 0, 0, 0
     reviews, checker_runs, issues = set(), 0, []
     reuses = {}
+    checker_generation, checker_sanity, checker_decisions, checker_execution, checker_stops = [], [], [], [], []
     for index, event in enumerate(events):
         payload = event.get("payload", {})
         kind, correlation = event.get("type"), payload.get("correlation_id")
@@ -66,7 +67,11 @@ def recovery_metrics(events, state, *, invalid_lines=0):
                     and (payload.get("checker") or {}).get("source") != "legacy_whitespace_tokens_v1")
                 verified_program = (payload.get("status") == "sample_program_failure"
                     and payload.get("verdict") in PROGRAM_FAILURES)
-                if (payload.get("passed") is False and (verified_wrong or verified_program)
+                if (payload.get("sample_policy") in {"semantic_check", "execution_only"}
+                        and payload.get("status") == "sample_execution_failure"
+                        and payload.get("passed") is False and payload.get("verdict") in EXECUTION_FAILURES):
+                    failures.append((index, "sample_execution_failure", payload))
+                elif (payload.get("passed") is False and (verified_wrong or verified_program)
                         and payload.get("reason") != "llm_generated_checker_unverified"):
                     failures.append((index, "sample_failure", payload))
         elif kind == "FORMAL_RESULT_REUSED":
@@ -99,6 +104,16 @@ def recovery_metrics(events, state, *, invalid_lines=0):
             replans += 1
         elif kind == "CHECKER_RUN":
             checker_runs += 1
+        elif kind == "CHECKER_GENERATION_RESULT":
+            checker_generation.append(payload)
+        elif kind == "CHECKER_SANITY_RESULT":
+            checker_sanity.append(payload)
+        elif kind == "CHECKER_DECISION":
+            checker_decisions.append(payload)
+        elif kind == "CHECKER_EXECUTION_RESULT":
+            checker_execution.append(payload)
+        elif kind == "UNVERIFIED_CHECKER_STOP":
+            checker_stops.append(payload)
         elif kind == "TASK_TERMINATED" and payload.get("terminal_status") == "invalid_model_output":
             invalid_outputs += 1
         elif kind == "REVIEW_RESULT" and payload.get("matched") is True:
@@ -137,7 +152,7 @@ def recovery_metrics(events, state, *, invalid_lines=0):
     expected_count = state.get("public_sample_count")
     first_sample_pass = None
     if initial_samples:
-        if any(p.get("passed") is False for p in initial_samples):
+        if any(p.get("passed") is False and p.get("status") != "sample_execution_failure" for p in initial_samples):
             first_sample_pass = False
         elif (isinstance(expected_count, int) and not isinstance(expected_count, bool)
               and len(initial_samples) == expected_count
@@ -212,10 +227,39 @@ def recovery_metrics(events, state, *, invalid_lines=0):
         "checker_custom_run_count": checker_runs,
         "contestant_custom_run_count": custom_runs - checker_runs,
         "llm_checker_reject_count": sum((p.get("generated_checker") or {}).get("decision") is False for _, p in samples)}
+    # Additive v2 checker counters describe its path, never candidate failures.
+    # Historical traces without these events keep unknown detail counts.
+    v2 = state.get("checker_schema_version") in {"checker_state_v2", "checker_state_v3"} or bool(checker_generation)
+    metrics.update({
+        "llm_checker_generation_count": metrics["llm_checker_call_count"],
+        "llm_checker_generation_failure_count": sum(p.get("generation_status") == "failed" for p in checker_generation) if v2 else None,
+        "llm_checker_sanity_pass_count": sum(p.get("sanity_status") == "pass" for p in checker_sanity) if v2 else None,
+        "llm_checker_sanity_failure_count": sum(p.get("sanity_status") == "failed" for p in checker_sanity) if v2 else None,
+        "llm_checker_candidate_pass_count": sum(p.get("stage") == "candidate" and p.get("checker_decision") == "pass_unverified" for p in checker_decisions) if v2 else None,
+        "llm_checker_candidate_reject_count": sum(p.get("stage") == "candidate" and p.get("checker_decision") == "rejected_unverified" for p in checker_decisions) if v2 else None,
+        "llm_checker_execution_failure_count": sum(p.get("execution_status") != "success" and p.get("failure_status") is not None for p in checker_execution) if v2 else None,
+        "unverified_checker_stop_count": len(checker_stops) if v2 else None})
+    v3_samples = [(index, p) for index, p in samples if p.get("sample_policy") in {"semantic_check", "execution_only"}]
+    # code-only never samples, so its four counts are known zero in every version.
+    v3 = state.get("checker_schema_version") == "checker_state_v3" or bool(v3_samples) or state.get("mode") == "code-only"
+    output_unverifiable = [(index, p) for index, p in v3_samples
+        if p.get("status") == "execution_pass_output_unverifiable" and p.get("passed") is None
+        and p.get("semantic_verification") == "unavailable"]
+    metrics.update({
+        "sample_semantic_verified_count": sum(p.get("semantic_verification") in {"client_verified", "remote_verified"}
+            and p.get("status") in {"sample_pass", "sample_wrong_answer"} and isinstance(p.get("passed"), bool)
+            for _, p in v3_samples) if v3 else None,
+        "sample_output_unverifiable_count": len(output_unverifiable) if v3 else None,
+        "sample_execution_failure_count": sum(p.get("status") == "sample_execution_failure"
+            and p.get("passed") is False and p.get("verdict") in EXECUTION_FAILURES for _, p in v3_samples) if v3 else None,
+        "formal_submit_after_unverifiable_sample_count": sum(any(sample_index < submission_index
+            and all(sample.get(key) == submission.get(key) for key in ("solution_version", "code_sha256", "model_call_id"))
+            for sample_index, sample in output_unverifiable) for submission_index, submission in submissions.values()) if v3 else None,
+        "sample_execution_recovery": "sample_execution_failure" in recovery_types if v3 else None})
     if invalid_lines or issues:
         for name in ("first_try_ac", "first_formal_submission_ac", "first_candidate_sample_pass",
                      "recovered_to_ac", "recovered_after_sample_failure", "recovered_after_formal_failure",
-                     "formal_recovery_to_ac"):
+                     "formal_recovery_to_ac", "sample_execution_recovery"):
             metrics[name] = None
         metrics["successful_debug_count"] = None
         metrics["recovery_type"] = []

@@ -13,16 +13,17 @@ from urllib.parse import quote
 import yaml
 
 from agent.models.runtime import ModelCallFailed
-from agent.models.types import AgentRole
+from agent.models.types import AgentRole, ChatMessage
 from agent.oj_client.client import OJClientError, OJProtocolError
 from agent.oj_client.types import ClientErrorKind, SubmissionStatus
 from agent.workspace.task import TaskWorkspace
 
 from .agent import AgentResult, AgentTerminalStatus, extract_cpp, problem_markdown
-from .budget import BudgetStopped, reserve_model_cost, validate_usage
+from .budget import MODEL_BUDGET_ACCOUNTING, BudgetStopped, reserve_model_cost, validate_usage
 from .budget_diagnostics import prompt_breakdown
-from .checker import CheckerSpec, SampleGatePolicy, check_run
-from .generated_checker import checker_messages, checker_stdin, generated_decision
+from .checker import (SAMPLE_POLICY, GENERATED_SAMPLE_POLICY, EXECUTION_FAILURES, CheckerSpec,
+                      SampleGatePolicy, SampleCheck, check_run, check_execution, checker_dimensions, sample_mode)
+from .generated_checker import legacy_checker_messages, checker_stdin, generated_decision
 from .formal_dedup import FORMAL_DEDUP_POLICY, cached_observation, evaluation_identity, stable_hash
 
 
@@ -34,16 +35,22 @@ class HarnessPolicy:
     # A finite backstop for zero-priced routes and never-passing public samples.
     max_llm_calls: int = 80
     max_wall_clock_seconds: Optional[float] = None
+    # Additional format-correction calls per CODE/DEBUG candidate.
+    max_code_extraction_retries: int = 3
 
     def __post_init__(self):
         for name in ("max_submissions", "debug_before_replan", "max_llm_calls"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
-        if self.max_submissions > 10:
-            raise ValueError("max_submissions cannot exceed the authorized 10")
+        if self.max_submissions > 100:
+            raise ValueError("max_submissions cannot exceed the authorized 100")
         if self.debug_before_replan != 3:
             raise ValueError("The current policy replans after 3 failed DEBUG candidates")
+        if (isinstance(self.max_code_extraction_retries, bool)
+                or not isinstance(self.max_code_extraction_retries, int)
+                or self.max_code_extraction_retries < 0):
+            raise ValueError("max_code_extraction_retries must be a non-negative integer")
         try:
             valid_cost = (not isinstance(self.max_cost_cny, bool)
                           and isinstance(self.max_cost_cny, (int, float))
@@ -98,6 +105,7 @@ class HarnessLoop:
         self.agent.started = self.started - self.base_seconds
         self.checkpoint: Dict[str, Any] = {}
         self.formal_dedup_enabled = True
+        self.budget_settlement_enabled = True
 
     def _snapshot_config(self):
         routes = {}
@@ -120,15 +128,21 @@ class HarnessLoop:
             "oj_endpoint_sha256": hashlib.sha256(base_url.encode("utf-8")).hexdigest(),
             "custom_run_code_alias": getattr(client, "send_custom_run_code_alias", False),
         }
+        # Historical checkpoints keep their original fail-fast policy and shape.
+        if (self.checkpoint and "max_code_extraction_retries"
+                not in self.checkpoint["config"]["policy"]):
+            config["policy"].pop("max_code_extraction_retries")
         if self.state.feedback_policy is not None:
             config["feedback_policy"] = self.state.feedback_policy
         if getattr(client, "contest_id", None) is not None:
             config["contest_id"] = client.contest_id
         if self.agent.sample_checking is not None:
-            config["sample_comparison"] = "sample_check_v1"
+            config["sample_comparison"] = self.agent.sample_checking.version
             config["sample_checking"] = self.agent.sample_checking.as_dict()
         if self.formal_dedup_enabled:
             config["formal_submission_dedup"] = dict(FORMAL_DEDUP_POLICY)
+        if self.budget_settlement_enabled:
+            config["model_budget_accounting"] = MODEL_BUDGET_ACCOUNTING
         return config
 
     def _resolve_checker(self):
@@ -149,7 +163,11 @@ class HarnessLoop:
         else:
             spec = CheckerSpec()
         self.checkpoint["sample_checker"] = self.state.sample_checker = asdict(spec)
-        self.workspace.trace.append("CHECKER_RESOLVED", asdict(spec))
+        dimensions = {}
+        if policy is not None and policy.version in {GENERATED_SAMPLE_POLICY, SAMPLE_POLICY}:
+            self.state.checker_schema_version = "checker_state_v3" if policy.version == SAMPLE_POLICY else "checker_state_v2"
+            dimensions = checker_dimensions(spec, source="explicit_config" if self.state.problem_id in policy.overrides else "problem_metadata")
+        self.workspace.trace.append("CHECKER_RESOLVED", {**asdict(spec), **dimensions})
 
     def _save(self):
         self.state.current_phase = self.checkpoint["phase"]
@@ -167,6 +185,7 @@ class HarnessLoop:
             raise ValueError(f"Invalid harness transition: {previous} -> {phase}")
         self.checkpoint["phase"] = phase
         self.checkpoint["completed_model"] = None
+        self.checkpoint["code_extraction_retries"] = 0
         self._save()
         self.workspace.trace.append(
             "STATE_CHANGE", {"from": previous, "to": phase, "reason": reason}
@@ -187,6 +206,7 @@ class HarnessLoop:
         route = self.agent.router.route(profile)
         input_limit, output_limit, bound = reserve_model_cost(
             route, messages, self.state, self.policy.max_cost_cny, components=components,
+            settle_actual=self.budget_settlement_enabled,
             audit=lambda data: self.workspace.trace.append("MODEL_BUDGET_CHECK",
                 {"role": role.value, "profile": profile.value, **data}))
         if role is AgentRole.DEBUG:
@@ -216,6 +236,15 @@ class HarnessLoop:
             feedback=self.checkpoint["feedback"],
             recent_history=self.checkpoint["history"],
         )
+        retries = self.checkpoint.get("code_extraction_retries", 0)
+        if retries and role in {AgentRole.CODE, AgentRole.DEBUG}:
+            messages[0] = ChatMessage("system", messages[0].content + (
+                f"\nFormat correction retry {retries}: your previous response did not contain "
+                "a complete C++20 program. Return only one fenced ```cpp code block containing "
+                "the entire program, including headers and main. Do not return analysis, "
+                "tool calls, XML commands, or requests to search files. No filesystem tools "
+                "are available; implement the solution from the provided problem and context."
+            ))
         components = prompt_breakdown(messages, role=role.value, plan=self.checkpoint["plan"],
             current_solution=code, feedback=self.checkpoint["feedback"], recent_history=self.checkpoint["history"])
         profile, input_limit, output_limit = self._reserve_model(role, messages, components=components)
@@ -234,6 +263,24 @@ class HarnessLoop:
         self.checkpoint["completed_model"] = {"role": role.value, "content": response.content}
         self._save()
         return response.content
+
+    def _retry_code_extraction(self, role):
+        maximum = self.checkpoint["config"]["policy"].get("max_code_extraction_retries", 0)
+        retries = self.checkpoint.get("code_extraction_retries", 0)
+        if retries >= maximum:
+            return False
+        failed_call_id = self.state.last_model_call_id
+        # Commit the counter and invalidate both response caches together. Resume
+        # must neither replay the malformed response nor reset the retry allowance.
+        self.checkpoint["code_extraction_retries"] = retries + 1
+        self.checkpoint["generated_code"] = None
+        self.checkpoint["completed_model"] = None
+        self._save()
+        self.workspace.trace.append("CODE_EXTRACTION_RETRY", {
+            "role": role.value, "retry": retries + 1, "max_retries": maximum,
+            "reason": "code_extraction_failed", "failed_model_call_id": failed_call_id,
+        }, correlation_id=failed_call_id)
+        return True
 
     def _code(self):
         version = self.state.solution_version
@@ -289,13 +336,23 @@ class HarnessLoop:
             self._transition("PLAN", reason)
             self.workspace.trace.append("REPLAN", {"reason": reason, **self._links()})
         else:
-            self._transition("DEBUG", "candidate_failed")
+            self._transition("DEBUG", self._failure_reason(feedback))
+
+    def _failure_reason(self, feedback):
+        if self.agent.sample_checking and self.agent.sample_checking.version == SAMPLE_POLICY:
+            if feedback.get("source") == "public_sample":
+                return feedback["failure_reason"]
+            return "formal_verdict_" + feedback["verdict"]
+        return "candidate_failed"
 
     def _samples(self):
         code = self._code()
         samples = self.checkpoint["problem"].get("samples", [])
         spec = CheckerSpec.from_dict(self.checkpoint.get("sample_checker") or {
             "kind": "token", "source": "legacy_whitespace_tokens_v1"})
+        policy = self.agent.sample_checking
+        v3 = policy is not None and policy.version == SAMPLE_POLICY
+        mode = sample_mode(spec, policy)
         while self.checkpoint["sample_index"] < len(samples):
             self._guard()
             index = self.checkpoint["sample_index"]
@@ -303,9 +360,13 @@ class HarnessLoop:
             saved_run = self.checkpoint.get("pending_sample_run")
             if saved_run is None:
                 self.state.custom_run_count += 1
+                if v3:
+                    self.checkpoint["pending_operation"] = {"kind": "sample_run", "sample_index": index + 1, **self._links()}
                 self._save()
                 result = self.agent.tools.call("run_code", code=code, stdin=sample["input"])
                 self.checkpoint["pending_sample_run"] = result.as_dict()
+                if v3:
+                    self.checkpoint["pending_operation"] = None
                 self._save()
             else:
                 from agent.oj_client.types import CustomRunResult
@@ -313,14 +374,21 @@ class HarnessLoop:
             verdict = result.status
             if verdict == "IE":
                 raise HarnessStopped("remote_infrastructure_failure", "sample_ie")
-            if verdict not in {"OK", "AC", "WA", "CE", "RE", "TLE", "MLE", "OLE"}:
+            allowed_statuses = {"OK", *EXECUTION_FAILURES} if mode == "execution_only" else {"OK", "AC", "WA", "CE", "RE", "TLE", "MLE", "OLE"}
+            if verdict not in allowed_statuses:
                 raise HarnessStopped("client_failure", "unknown_custom_run_status")
-            if verdict in {"OK", "AC"} and result.stdout is None:
+            if mode == "execution_only" and verdict == "OK" and (not isinstance(result.exit_code, int) or isinstance(result.exit_code, bool)):
+                raise HarnessStopped("client_failure", "custom_run_exit_code_unknown")
+            if mode != "execution_only" and verdict in {"OK", "AC"} and result.stdout is None:
                 raise HarnessStopped("client_failure", "custom_run_stdout_missing")
-            checked = check_run(spec, sample, result)
+            execution_failed = v3 and (verdict in EXECUTION_FAILURES or result.exit_code not in {None, 0})
+            if execution_failed and verdict not in EXECUTION_FAILURES:
+                checked = SampleCheck("sample_execution_failure", False, "sample_execution_failure", "RE")
+            else:
+                checked = check_execution(result) if mode == "execution_only" or execution_failed else check_run(spec, sample, result)
             generated = None
             if (checked.passed is None and checked.reason != "stdout_truncated"
-                    and self.agent.sample_checking and self.agent.sample_checking.llm_checker != "disabled"):
+                    and policy and not v3 and policy.llm_checker != "disabled"):
                 generated = self._llm_check(sample, result.stdout, index)
                 if generated["decision"] is True and self.agent.sample_checking.llm_checker == "submit_on_pass":
                     # Unverifiable remains unverifiable, but explicit policy may submit.
@@ -330,6 +398,20 @@ class HarnessLoop:
                        "result": asdict(result)}
             if generated is not None:
                 payload["generated_checker"] = generated
+            if policy and policy.version in {GENERATED_SAMPLE_POLICY, SAMPLE_POLICY}:
+                payload.update(checker_dimensions(spec, source="explicit_config" if self.state.problem_id in self.agent.sample_checking.overrides else "problem_metadata",
+                                                 generated=generated is not None))
+                payload["sample_check_status"] = (generated or {}).get("sample_check_status", checked.status)
+                if v3:
+                    execution_failed = checked.status in {"sample_execution_failure", "sample_program_failure"}
+                    payload.update(sample_policy=mode,
+                        semantic_verification="unavailable" if mode == "execution_only" else "not_evaluated" if execution_failed else payload["checker_verification"],
+                        execution_status="execution_failed" if execution_failed else "execution_pass",
+                        formal_fallback="enabled" if mode == "execution_only" else "disabled",
+                        allow_formal_submit=checked.status == "execution_pass_output_unverifiable")
+                    if payload["allow_formal_submit"]:
+                        payload["sample_check_status"] = "output_unverifiable"
+                self.state.sample_check_status = payload["sample_check_status"]
             self.workspace.write_json(
                 f"artifacts/samples/{self.state.solution_version}-{index + 1}.json", payload
             )
@@ -338,7 +420,8 @@ class HarnessLoop:
             self.checkpoint["sample_index"] = index + 1
             self.checkpoint["pending_sample_run"] = None
             if checked.passed is False:
-                self.state.sample_gate_reject_count += 1
+                if checked.status != "sample_execution_failure":
+                    self.state.sample_gate_reject_count += 1
                 self.state.sample_gate_status = checked.status
                 # Persist a failure stage, never a completed sample stage. Recovery
                 # must process this feedback before it can advance to submission.
@@ -350,18 +433,23 @@ class HarnessLoop:
                     "actual": result.stdout, "stderr": result.stderr,
                     "exit_code": result.exit_code,
                 }
+                if v3:
+                    self.checkpoint["sample_feedback"]["failure_reason"] = (
+                        "sample_execution_failure" if payload["execution_status"] == "execution_failed" else checked.status)
                 self._save()
                 self._sample_failure()
                 return
             if checked.passed is None:
-                self.state.sample_check_unverifiable_count += 1
-                self.state.sample_gate_status = "sample_check_unverifiable"
+                if not v3 or not payload["allow_formal_submit"]:
+                    self.state.sample_check_unverifiable_count += 1
+                self.state.sample_gate_status = "output_unverifiable" if v3 and payload["allow_formal_submit"] else "sample_check_unverifiable"
                 # Persist the stopped stage before terminating or allowing submit.
                 self.checkpoint["test_stage"] = "sample_unverifiable"
                 self._save()
-                if (not (generated or {}).get("allow_formal_submit") and
-                        (self.agent.sample_checking is None or self.agent.sample_checking.on_unverifiable == "stop")):
-                    raise HarnessStopped("sample_check_unverifiable", checked.reason)
+                legacy_allow = not v3 and ((generated or {}).get("allow_formal_submit") or
+                    policy is not None and policy.on_unverifiable == "submit")
+                if not self._execution_fallback(payload) and not legacy_allow:
+                    self._stop_unverified(generated, checked.reason)
                 self.checkpoint["test_stage"] = "samples"
             self._save()
         if self.state.sample_gate_status is None:
@@ -387,9 +475,12 @@ class HarnessLoop:
         return result
 
     def _llm_check(self, sample, stdout, index):
+        if self.agent.sample_checking.version == GENERATED_SAMPLE_POLICY:
+            from .checker_session import GeneratedCheckerSession
+            return GeneratedCheckerSession(self).check(sample, stdout, index)
         saved = self.checkpoint.get("generated_checker")
         if saved is None:
-            messages = checker_messages(self.agent.context_builder, self.checkpoint["problem"])
+            messages = legacy_checker_messages(self.agent.context_builder, self.checkpoint["problem"])
             profile, input_limit, output_limit = self._reserve_model(AgentRole.CODE, messages)
             response = self.agent.model_runtime.complete(AgentRole.CODE, profile, messages,
                                                          purpose="sample_checker_generation")
@@ -437,14 +528,35 @@ class HarnessLoop:
     def _sample_failure(self):
         self._failure(self.checkpoint["sample_feedback"])
 
+    def _stop_unverified(self, generated, reason):
+        status = (generated or {}).get("failure_status")
+        if status and self.agent.sample_checking.version == GENERATED_SAMPLE_POLICY:
+            self.workspace.trace.append("UNVERIFIED_CHECKER_STOP", {**generated, "terminal_status": status})
+            raise HarnessStopped(status, (generated or {}).get("reason") or status)
+        raise HarnessStopped("sample_check_unverifiable", reason)
+
     def _sample_unverifiable(self):
         generated = self.checkpoint["sample_results"][-1].get("generated_checker") or {}
-        if (generated.get("allow_formal_submit") or
-                self.agent.sample_checking and self.agent.sample_checking.on_unverifiable == "submit"):
+        policy = self.agent.sample_checking
+        legacy_allow = (policy is None or policy.version != SAMPLE_POLICY) and (generated.get("allow_formal_submit") or
+                policy is not None and policy.on_unverifiable == "submit")
+        if self._execution_fallback(self.checkpoint["sample_results"][-1]) or legacy_allow:
             self.checkpoint["test_stage"] = "samples"
             self._save()
         else:
-            raise HarnessStopped("sample_check_unverifiable", self.checkpoint["sample_results"][-1]["reason"])
+            self._stop_unverified(generated, self.checkpoint["sample_results"][-1]["reason"])
+
+    def _execution_fallback(self, payload):
+        """Resume only a committed, known execution pass under the frozen v3 policy."""
+        from agent.oj_client.types import CustomRunResult
+        policy = self.agent.sample_checking
+        if not policy or policy.version != SAMPLE_POLICY:
+            return False
+        spec = CheckerSpec.from_dict(self.checkpoint["sample_checker"])
+        return (sample_mode(spec, policy) == "execution_only"
+            and payload.get("status") == "execution_pass_output_unverifiable"
+            and payload.get("passed") is None
+            and check_execution(CustomRunResult.from_dict(payload["result"])).status == "execution_pass_output_unverifiable")
 
     def _formal_identity(self, code):
         identity = evaluation_identity(self.state.task_id, self.state.problem_id,
@@ -664,11 +776,17 @@ class HarnessLoop:
             self.agent.started = self.started - self.base_seconds
             self.checkpoint = self.workspace.read_json("checkpoint.json")
             self.formal_dedup_enabled = "formal_submission_dedup" in self.checkpoint["config"]
+            self.budget_settlement_enabled = "model_budget_accounting" in self.checkpoint["config"]
             # Old checkpoints retain their original comparison, without an upgrade.
             if "sample_checking" not in self.checkpoint["config"]:
                 if self.agent.sample_checking is not None and self.agent.sample_checking_explicit:
                     raise ValueError("Resume configuration differs from the saved sample policy")
                 self.agent.sample_checking = None
+            elif (not self.agent.sample_checking_explicit and self.agent.sample_checking is not None
+                    and self.agent.sample_checking.as_dict() == SampleGatePolicy().as_dict()
+                    and self.checkpoint["config"]["sample_checking"]["version"] != SAMPLE_POLICY):
+                # Default policy changes do not upgrade an existing checkpoint.
+                self.agent.sample_checking = SampleGatePolicy.from_dict(self.checkpoint["config"]["sample_checking"])
             if self.checkpoint["config"] != self._snapshot_config():
                 raise ValueError("Resume configuration differs from the saved policy/routes")
             if self.checkpoint["phase"] == "DONE":
@@ -694,8 +812,16 @@ class HarnessLoop:
                         for key in ("llm_call_count", "llm_success_count", "llm_failure_count",
                                     "last_model_call_id", "calls_per_model_profile",
                                     "input_tokens", "output_tokens", "estimated_cost",
-                                    "cost_estimate_status", "llm_usage_missing_count"):
+                                    "cost_estimate_status", "cost_currency", "llm_usage_missing_count",
+                                    "budget_committed_cny", "pending_model_reservation"):
                             setattr(self.state, key, saved.get(key, getattr(self.state, key)))
+                if (self.agent.sample_checking and self.agent.sample_checking.version == GENERATED_SAMPLE_POLICY
+                        and (pending.get("purpose") == "sample_checker_generation" or kind == "checker_run")):
+                    from .checker_session import GeneratedCheckerSession
+                    index = self.checkpoint["sample_index"]
+                    generated = GeneratedCheckerSession(self).check(self.checkpoint["problem"]["samples"][index],
+                        (self.checkpoint.get("pending_sample_run") or {}).get("stdout", ""), index)
+                    self._stop_unverified(generated, "checker_action_not_reissued")
                 raise HarnessStopped("result_unknown", f"interrupted_{kind}_not_reissued")
             self.state.resume_count += 1
             self.workspace.trace.append("TASK_RESUMED", {"phase": self.checkpoint["phase"]})
@@ -756,10 +882,17 @@ class HarnessLoop:
                         self.checkpoint["candidate_from_debug"] = False
                         self._transition("CODE")
                     elif phase == "CODE":
+                        role = AgentRole.DEBUG if self.checkpoint["candidate_from_debug"] else AgentRole.CODE
                         generated = self.checkpoint.get("generated_code")
                         if generated is None:
-                            generated = self._generate(AgentRole.CODE)
-                        self._record_candidate(extract_cpp(generated))
+                            generated = self._generate(role)
+                        try:
+                            code = extract_cpp(generated)
+                        except ValueError:
+                            if self._retry_code_extraction(role):
+                                continue
+                            raise
+                        self._record_candidate(code)
                         self.checkpoint["generated_code"] = None
                         self._transition("TEST")
                     elif phase == "DEBUG":

@@ -12,7 +12,7 @@ import pytest
 import yaml
 
 from agent.config import ClientSettings
-from agent.core.checker import SampleGatePolicy
+from agent.core.checker import SampleGatePolicy as GatePolicy
 from agent.core.context import ContextBuilder
 from agent.core.policy import ModelPolicy
 from agent.models.registry import ModelRegistry
@@ -28,6 +28,11 @@ from experiments.cli import main
 from client_tests.test_phase5_experiments import config, service, ExperimentOJ, Provider
 
 ROOT = Path(__file__).parents[1]
+
+
+def SampleGatePolicy(**kwargs):
+    """Legacy preflight cases keep their explicit v2 policy."""
+    return GatePolicy(**{"version": "sample_check_v2", **kwargs})
 
 
 @pytest.fixture

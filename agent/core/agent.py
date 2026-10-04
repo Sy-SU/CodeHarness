@@ -40,6 +40,11 @@ class AgentTerminalStatus(str, enum.Enum):
     CONTEXT_LIMIT = "context_limit"
     CONDITION_MISMATCH = "condition_mismatch"
     SAMPLE_CHECK_UNVERIFIABLE = "sample_check_unverifiable"
+    CHECKER_REJECTED_UNVERIFIED = "checker_rejected_unverified"
+    CHECKER_GENERATION_FAILED = "checker_generation_failed"
+    CHECKER_EXECUTION_FAILED = "checker_execution_failed"
+    CHECKER_SANITY_FAILED = "checker_sanity_failed"
+    CHECKER_RESULT_UNKNOWN = "checker_result_unknown"
 
 
 @dataclass(frozen=True)

@@ -50,6 +50,7 @@ class EventType(str, enum.Enum):
     REPLAN = "REPLAN"
     TASK_RESUMED = "TASK_RESUMED"
     BUDGET_RESERVATION = "BUDGET_RESERVATION"
+    BUDGET_SETTLEMENT = "BUDGET_SETTLEMENT"
     MODEL_BUDGET_CHECK = "MODEL_BUDGET_CHECK"
     LLM_TRANSPORT_DIAGNOSTICS = "LLM_TRANSPORT_DIAGNOSTICS"
     TASK_INTERRUPTED = "TASK_INTERRUPTED"
@@ -61,6 +62,11 @@ class EventType(str, enum.Enum):
     GENERATED_CHECKER = "GENERATED_CHECKER"
     GENERATED_CHECKER_RESULT = "GENERATED_CHECKER_RESULT"
     CHECKER_RUN = "CHECKER_RUN"
+    CHECKER_GENERATION_RESULT = "CHECKER_GENERATION_RESULT"
+    CHECKER_SANITY_RESULT = "CHECKER_SANITY_RESULT"
+    CHECKER_EXECUTION_RESULT = "CHECKER_EXECUTION_RESULT"
+    CHECKER_DECISION = "CHECKER_DECISION"
+    UNVERIFIED_CHECKER_STOP = "UNVERIFIED_CHECKER_STOP"
     FORMAL_RESULT_REUSED = "FORMAL_RESULT_REUSED"
 
 
@@ -135,6 +141,7 @@ class TaskState:
     replan_count: int = 0
     custom_run_count: int = 0
     budget_committed_cny: float = 0.0
+    pending_model_reservation: Optional[Dict[str, Any]] = None
     resume_count: int = 0
     experiment_id: Optional[str] = None
     experiment_strategy: Optional[str] = None
@@ -149,6 +156,9 @@ class TaskState:
     sample_gate_status: Optional[str] = None
     sample_gate_reject_count: int = 0
     sample_check_unverifiable_count: int = 0
+    checker_schema_version: Optional[str] = None
+    checker_observation: Dict[str, Any] = field(default_factory=dict)
+    sample_check_status: Optional[str] = None
     recovery_metrics: Dict[str, Any] = field(default_factory=dict)
     public_sample_count: Optional[int] = None
 
